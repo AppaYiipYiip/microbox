@@ -1,0 +1,13 @@
+# Normalize everything to LF by default (Nextflow/nf-core/bash tooling expects it;
+# Windows git's autocrlf can otherwise silently break shebangs and CI).
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.nf   text eol=lf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.gz   binary
+*.zip  binary

@@ -1,0 +1,27 @@
+# Nextflow
+work/
+.nextflow/
+.nextflow.log*
+results/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Secrets / local overrides — never commit real data, credentials, or company-specific config
+.env
+*.pem
+credentials*.json
+params/*.local.yaml
+params/company.yaml
+
+# OS cruft
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local-only Claude Code tool permissions (personal, not shared project config)
+.claude/settings.local.json

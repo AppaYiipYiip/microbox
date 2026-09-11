@@ -11,65 +11,95 @@ include { MULTIQC          } from '../modules/nf-core/multiqc/main'
 workflow MICROBOX {
 
     take:
-    ch_samplesheet // channel: [ meta, [ fastq_1, (fastq_2) ] ]
+    // input_type=fastq:   [ meta, [ fastq_1, (fastq_2) ] ]
+    // input_type=contigs: [ meta, contigs.fasta ]
+    ch_samplesheet
 
     main:
-    FASTP(
-        ch_samplesheet.map { meta, reads -> [ meta, reads, [] ] }, // no adapter_fasta
-        false, // discard_trimmed_pass
-        false, // save_trimmed_fail
-        false  // save_merged
-    )
-
-    FASTQC(FASTP.out.reads)
-
-    // Host depletion - optional stage, PLAN.md §6.7 ("every stage optional,
-    // no tool hardcoded"). Host genome is always a runtime parameter
-    // (params.host_fasta), never bundled - PLAN.md §6.1 owner answer #5
-    // ("host organism unknown, different animal species").
+    ch_multiqc_files  = Channel.empty()
     ch_bowtie2_log    = Channel.empty()
-    ch_depleted_reads = FASTP.out.reads
+    ch_depleted_reads = Channel.empty()
+    ch_contigs        = Channel.empty()
 
-    if (!params.skip_host_removal) {
-        BOWTIE2_BUILD([ [ id: 'host' ], file(params.host_fasta, checkIfExists: true) ])
-
-        BOWTIE2_ALIGN(
-            FASTP.out.reads,
-            BOWTIE2_BUILD.out.index,
-            [ [ id: 'host' ], [] ], // fasta only needed for CRAM output - not using it
-            true,  // save_unaligned: the non-host reads are the actual product of this step
-            false  // sort_bam: don't need a sorted alignment for this milestone
+    if (params.input_type == 'fastq') {
+        // --- Read-based stages: only meaningful when starting from raw FASTQ.
+        FASTP(
+            ch_samplesheet.map { meta, reads -> [ meta, reads, [] ] }, // no adapter_fasta
+            false, // discard_trimmed_pass
+            false, // save_trimmed_fail
+            false  // save_merged
         )
+        FASTQC(FASTP.out.reads)
+        ch_multiqc_files = ch_multiqc_files
+            .mix(FASTP.out.json.map { meta, f -> f })
+            .mix(FASTQC.out.zip.map { meta, f -> f })
 
-        ch_bowtie2_log    = BOWTIE2_ALIGN.out.log.map { meta, f -> f }
-        ch_depleted_reads = BOWTIE2_ALIGN.out.fastq
+        // Host depletion - optional stage, PLAN.md §6.7 ("every stage
+        // optional, no tool hardcoded"). Host genome is always a runtime
+        // parameter (params.host_fasta), never bundled - PLAN.md §6.1 owner
+        // answer #5 ("host organism unknown, different animal species").
+        ch_depleted_reads = FASTP.out.reads
+
+        if (!params.skip_host_removal) {
+            BOWTIE2_BUILD([ [ id: 'host' ], file(params.host_fasta, checkIfExists: true) ])
+
+            BOWTIE2_ALIGN(
+                FASTP.out.reads,
+                BOWTIE2_BUILD.out.index,
+                [ [ id: 'host' ], [] ], // fasta only needed for CRAM output - not using it
+                true,  // save_unaligned: the non-host reads are the actual product of this step
+                false  // sort_bam: don't need a sorted alignment for this milestone
+            )
+
+            ch_bowtie2_log    = BOWTIE2_ALIGN.out.log.map { meta, f -> f }
+            ch_depleted_reads = BOWTIE2_ALIGN.out.fastq
+            ch_multiqc_files  = ch_multiqc_files.mix(ch_bowtie2_log)
+        }
+
+        // Assembly - de novo, no reference/DB needed. MEGAHIT wants
+        // reads1/reads2 as two SEPARATE path lists (not one combined
+        // [r1,r2] list like every other module) - easy to get wrong, worth
+        // the explicit comment.
+        MEGAHIT(
+            ch_depleted_reads.map { meta, reads ->
+                meta.single_end ? [ meta, reads, [] ] : [ meta, [ reads[0] ], [ reads[1] ] ]
+            }
+        )
+        ch_contigs = MEGAHIT.out.contigs
+
+    } else if (params.input_type == 'contigs') {
+        // --- Starting from an existing assembly: everything upstream of
+        // contigs (QC, depletion, assembly itself) doesn't apply - there are
+        // no reads to trim/deplete/assemble, only contigs to classify/QC.
+        // skip_host_removal has no effect here (nothing to skip, no error
+        // either - it's just inapplicable, matching PLAN.md §6.7's "any
+        // module can be an entry point" rather than making callers guess
+        // which flags matter for which entry point).
+        ch_contigs = ch_samplesheet
     }
 
-    // Assembly - de novo, no reference/DB needed. MEGAHIT wants reads1/reads2
-    // as two SEPARATE path lists (not one combined [r1,r2] list like every
-    // other module so far) - easy to get wrong, worth the explicit comment.
-    MEGAHIT(
-        ch_depleted_reads.map { meta, reads ->
-            meta.single_end ? [ meta, reads, [] ] : [ meta, [ reads[0] ], [ reads[1] ] ]
-        }
-    )
-
-    // Taxonomic classification - runs on the depleted READS (standard
-    // metagenomics practice, e.g. nf-core/taxprofiler), not on MEGAHIT's
-    // contigs; the two stages are independent, not sequential. Off by
-    // default (params.skip_kraken2 = true) even in the test profile: unlike
-    // every other test fixture so far (plain URLs Nextflow stages directly),
-    // the Kraken2 DB is a whole directory that needs a separate one-time
-    // `bin/download-dbs.sh` run first - keeping the zero-setup test profile
-    // zero-setup was judged more valuable than testing this by default.
+    // Taxonomic classification. Works on either reads (fastq entry) or
+    // contigs (contigs entry) - Kraken2 classifies whatever FASTA/FASTQ it's
+    // given, so a contigs file is passed through as a "single-end read" for
+    // this module's purposes, not literally reinterpreted as short reads.
+    // Independent of assembly either way - not a downstream dependency of
+    // MEGAHIT/QUAST. Off by default (params.skip_kraken2 = true) even in the
+    // test profile: unlike every other test fixture, the Kraken2 DB is a
+    // whole directory that needs a separate one-time `bin/download-dbs.sh`
+    // run first - keeping the zero-setup test profile zero-setup was judged
+    // more valuable than testing this by default.
     ch_kraken2_report = Channel.empty()
     ch_bracken_report = Channel.empty()
 
     if (!params.skip_kraken2) {
         ch_kraken2_db = file(params.kraken2_db, checkIfExists: true, type: 'dir')
 
+        ch_classify_input = params.input_type == 'contigs'
+            ? ch_contigs.map { meta, contigs -> [ meta + [ single_end: true ], contigs ] }
+            : ch_depleted_reads
+
         KRAKEN2_KRAKEN2(
-            ch_depleted_reads,
+            ch_classify_input,
             ch_kraken2_db,
             false, // save_output_fastqs
             false  // save_reads_assignment
@@ -81,8 +111,12 @@ workflow MICROBOX {
         // already ship the required *.kmer_distrib files for (no separate
         // bracken-build step). Depends on Kraken2 having run, so nested
         // here rather than given its own top-level `if`; still independently
-        // skippable (params.skip_bracken) if someone wants classification
-        // without abundance re-estimation.
+        // skippable (params.skip_bracken). Scientifically, Bracken's
+        // read-length-specific kmer distributions are a better fit for
+        // reads than variable-length contigs - allowed here mechanically
+        // (test-all-combinations, owner directive 2026-09-11) but treat
+        // contigs-mode Bracken output as a mechanics check, not a trusted
+        // abundance estimate.
         if (!params.skip_bracken) {
             BRACKEN_BRACKEN(KRAKEN2_KRAKEN2.out.report, ch_kraken2_db)
             ch_bracken_report = BRACKEN_BRACKEN.out.txt.map { meta, f -> f }
@@ -92,23 +126,19 @@ workflow MICROBOX {
     // Assembly QC - metagenomic assembly has no single reference genome to
     // compare against (it's a mixed community, not one organism), so fasta/
     // gff stay empty; QUAST falls back to reference-free stats (N50, contig
-    // count, etc.). Independently skippable, on by default like MEGAHIT
-    // (no external DB, nothing stopping it running in the zero-setup test
-    // profile).
+    // count, etc.). Independently skippable, on by default (no external DB).
     ch_quast_tsv = Channel.empty()
 
     if (!params.skip_quast) {
         QUAST(
-            MEGAHIT.out.contigs,
+            ch_contigs,
             [ [ id: 'none' ], [] ], // no reference fasta
             [ [ id: 'none' ], [] ]  // no reference gff
         )
         ch_quast_tsv = QUAST.out.tsv.map { meta, f -> f }
     }
 
-    ch_multiqc_files = FASTP.out.json.map { meta, f -> f }
-        .mix(FASTQC.out.zip.map { meta, f -> f })
-        .mix(ch_bowtie2_log)
+    ch_multiqc_files = ch_multiqc_files
         .mix(ch_kraken2_report)
         .mix(ch_bracken_report)
         .mix(ch_quast_tsv)
@@ -118,7 +148,7 @@ workflow MICROBOX {
     MULTIQC(ch_multiqc_files)
 
     emit:
-    depleted_reads = ch_depleted_reads   // channel: [ meta, [ reads ] ] - host-depleted (or just trimmed, if skipped) reads
-    contigs        = MEGAHIT.out.contigs // channel: [ meta, contigs.fa.gz ]
+    depleted_reads = ch_depleted_reads // channel: [ meta, [ reads ] ] - empty unless input_type=fastq
+    contigs        = ch_contigs        // channel: [ meta, contigs.fa(.gz) ]
     multiqc_report = MULTIQC.out.report
 }

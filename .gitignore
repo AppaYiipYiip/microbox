@@ -5,6 +5,11 @@ work/
 results/
 logs/
 
+# nf-test
+.nf-test/
+.nf-test.log
+tests/results/
+
 # Python
 __pycache__/
 *.pyc

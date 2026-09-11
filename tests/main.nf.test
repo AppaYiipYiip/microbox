@@ -1,0 +1,226 @@
+nextflow_pipeline {
+
+    name "microbox pipeline"
+    script "main.nf"
+
+    // outdir MUST be nf-test's own $outputDir variable, not a hand-picked
+    // path - nf-test isolates every test run into its own temp directory
+    // tree, and a relative path written into params.outdir doesn't land
+    // where a `path(...)` assertion looks for it (found the hard way: every
+    // test failed on this before the fix, even though the pipeline itself
+    // ran successfully).
+
+    // ============================================================
+    // input_type=fastq (default entry point) - zero external setup
+    // ============================================================
+    // tag "basic": nf-test test --tag basic
+
+    test("fastq: defaults - full pipeline runs end to end") {
+        tag "basic"
+
+        when {
+            params { outdir = "$outputDir" }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+            assert path("${outputDir}/fastp/test_R1.fastp.fastq.gz").exists()
+            assert path("${outputDir}/bowtie2/align").exists()
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+            assert path("${outputDir}/quast/test.tsv").exists()
+            // Kraken2/Bracken are opt-in (skip_kraken2 defaults true) - the
+            // default run must NOT produce them, proving the skip flag
+            // actually skips, not just defaults to "off" in name only.
+            assert !path("${outputDir}/kraken2").exists()
+            assert !path("${outputDir}/bracken").exists()
+            // FAIR provenance record (PLAN.md §6.2/§7.2, crucial requirement)
+            // must exist on every run, not just successful ones tested by hand.
+            assert path("${outputDir}/run-report").list().size() > 0
+        }
+    }
+
+    test("fastq: skip_host_removal=true skips Bowtie2, assembly still runs on undepleted reads") {
+        tag "basic"
+
+        when {
+            params {
+                outdir            = "$outputDir"
+                skip_host_removal = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+        }
+    }
+
+    test("fastq: skip_quast=true skips assembly QC, assembly itself still runs") {
+        tag "basic"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                skip_quast = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/quast").exists()
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+        }
+    }
+
+    test("fastq: skip_host_removal AND skip_quast together - independent flags don't interfere") {
+        tag "basic"
+
+        when {
+            params {
+                outdir            = "$outputDir"
+                skip_host_removal = true
+                skip_quast        = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/bowtie2").exists()
+            assert !path("${outputDir}/quast").exists()
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    // ============================================================
+    // input_type=contigs (second entry point, PLAN.md §6.7) - also
+    // zero external setup: everything upstream of contigs (QC,
+    // depletion, assembly) simply doesn't run, not "runs and gets
+    // skipped" - there's nothing to feed it.
+    // ============================================================
+
+    test("contigs: defaults - skips straight to QUAST, no read-based stages run at all") {
+        tag "basic"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                input_type = "contigs"
+                input      = "${projectDir}/assets/samplesheet_test_contigs.csv"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/fastp").exists()
+            assert !path("${outputDir}/fastqc").exists()
+            assert !path("${outputDir}/bowtie2").exists()
+            assert !path("${outputDir}/megahit").exists()
+            assert path("${outputDir}/quast/test.tsv").exists()
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    test("contigs: skip_quast=true - pipeline still completes with nothing but MultiQC") {
+        tag "basic"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                input_type = "contigs"
+                input      = "${projectDir}/assets/samplesheet_test_contigs.csv"
+                skip_quast = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/quast").exists()
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    // ============================================================
+    // Requires bin/download-dbs.sh viral to have been run first (the DB is
+    // a whole directory nf-test/Nextflow can't fetch on its own). Run
+    // explicitly with: nf-test test --tag requires_db
+    // ============================================================
+
+    test("fastq: Kraken2+Bracken classify the depleted reads when explicitly enabled") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_kraken2 = false
+                kraken2_db   = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert path("${outputDir}/bracken/test.tsv").exists()
+        }
+    }
+
+    test("fastq: Kraken2 enabled but skip_bracken=true - classification without re-estimation") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_kraken2 = false
+                skip_bracken = true
+                kraken2_db   = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert !path("${outputDir}/bracken").exists()
+        }
+    }
+
+    test("fastq: skip_host_removal AND Kraken2 together - classifies undepleted reads correctly") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir            = "$outputDir"
+                skip_host_removal = true
+                skip_kraken2      = false
+                kraken2_db        = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+        }
+    }
+
+    test("contigs: Kraken2 classifies contigs directly (not reads) when enabled") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir       = "$outputDir"
+                input_type   = "contigs"
+                input        = "${projectDir}/assets/samplesheet_test_contigs.csv"
+                skip_kraken2 = false
+                kraken2_db   = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+        }
+    }
+
+}

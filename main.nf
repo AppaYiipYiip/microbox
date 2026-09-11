@@ -5,16 +5,30 @@ include { MICROBOX } from './workflows/microbox'
 workflow {
 
     main:
-    ch_samplesheet = Channel
-        .fromPath(params.input, checkIfExists: true)
-        .splitCsv(header: true)
-        .map { row ->
-            def meta  = [ id: row.sample, single_end: !row.fastq_2 ]
-            def reads = meta.single_end
-                ? [ file(row.fastq_1, checkIfExists: true) ]
-                : [ file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true) ]
-            [ meta, reads ]
-        }
+    // Multiple entry points (PLAN.md §6.7: "any element can be first").
+    // params.input_type picks which samplesheet shape to expect and which
+    // stages are even applicable - a raw-FASTQ run and a contigs-only run
+    // are fundamentally different starting points, not the same channel
+    // with some stages skipped.
+    if (params.input_type == 'fastq') {
+        ch_samplesheet = Channel
+            .fromPath(params.input, checkIfExists: true)
+            .splitCsv(header: true)
+            .map { row ->
+                def meta  = [ id: row.sample, single_end: !row.fastq_2 ]
+                def reads = meta.single_end
+                    ? [ file(row.fastq_1, checkIfExists: true) ]
+                    : [ file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true) ]
+                [ meta, reads ]
+            }
+    } else if (params.input_type == 'contigs') {
+        ch_samplesheet = Channel
+            .fromPath(params.input, checkIfExists: true)
+            .splitCsv(header: true)
+            .map { row -> [ [ id: row.sample ], file(row.contigs, checkIfExists: true) ] }
+    } else {
+        error "params.input_type must be 'fastq' or 'contigs', got: ${params.input_type}"
+    }
 
     MICROBOX(ch_samplesheet)
 

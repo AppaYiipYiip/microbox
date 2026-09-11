@@ -3,11 +3,13 @@ work/
 .nextflow/
 .nextflow.log*
 results/
+logs/
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+.venv-ui/
 venv/
 *.egg-info/
 

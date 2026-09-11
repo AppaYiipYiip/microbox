@@ -24,7 +24,7 @@ The project folder contains the specification, this plan, and the fact-check rep
 
 | Environment | Host | RAM | Role |
 |---|---|---|---|
-| **dev** | This Windows 11 PC (WSL2 + Docker Desktop) | 16 GB | Development & pipeline building |
+| **dev** | Windows laptops (WSL2 + Docker Desktop) | 16 GB total, **~7 GB usable** (confirmed 2026-09-11 — both dev laptops cap out around 7 GB actually available to WSL2/Docker, not the 12-14 GB originally assumed achievable via `.wslconfig` tuning) | Development & pipeline building |
 | **test** | AWS (flexible sizing) | flexible | End-to-end testing |
 | **prod** | Private Windows VM (WSL2 + Docker Engine) | 120+ GB | Production runs |
 
@@ -34,7 +34,8 @@ The project folder contains the specification, this plan, and the fact-check rep
 - Docker is the **transport layer** between machines: identical pinned images run on dev, AWS and prod; reference DBs and sample data move separately (download scripts / S3 / disks). Offline prod: `docker save`/`docker load` tarballs or a local registry.
 - Test data: **public dataset** (small metagenomics test set) will be downloaded.
 - Design consequence: one repo, parameterized per environment via Nextflow profiles + one config file.
-  Dev uses the tiny Viral Kraken2 DB for smoke tests + `standard_08_GB` (7.45 GiB RAM) for truth runs (16 GB total RAM); prod default is `k2_standard_16_GB` (14.9 GiB RAM) — owner rule: RAM is for calculations, not the database; the full `k2_standard` (103.1 GiB RAM) is only a later accuracy upgrade.
+  Prod default is `k2_standard_16_GB` (14.9 GiB RAM) — owner rule: RAM is for calculations, not the database; the full `k2_standard` (103.1 GiB RAM) is only a later accuracy upgrade.
+- **Dev RAM correction (2026-09-11):** with only ~7 GB actually usable on the dev laptops, `standard_08_GB` (7.45 GiB RAM just for the DB) no longer fits once OS/Docker/other overhead is accounted for — confirmed the hard way: a fresh WSL2 VM here reported 7.5 GiB available, and a naive 36 GB process resource request (before `resourceLimits` clamping was fixed) failed outright. **Dev truth-validation is dropped from the local machines and moved entirely to AWS** (§2.3, §6.3 already run the full Kraken2 DB there as the primary test tier — the AWS phase was already doing the real accuracy validation, this just makes it official rather than dev doing a smaller/redundant version). Dev's role is now purely mechanics/smoke testing — the tiny Viral DB (0.6 GiB RAM) — never anything DB-accuracy-related locally. All per-process resource ceilings on dev/test profiles are capped ≤ 6 GB (`conf/test.config`), not sized against the old 12-14 GB assumption.
 
 ---
 
@@ -163,7 +164,7 @@ Sources: [aws-indexes pre-built DB table](https://benlangmead.github.io/aws-inde
 | Environment | DB | RAM | Purpose |
 |---|---|---|---|
 | Internal dev — smoke | `k2_viral_20260626` (0.53 GiB dl) | 0.6 GiB | Pipeline mechanics: wiring, resume, reports, the Bracken step |
-| Internal dev — truth | `k2_standard_08_GB_20260626` (5.54 GiB dl) | 7.45 GiB | Accuracy validation against the mock community — this personal PC's ceiling (16 GB total RAM); the full DB never runs here |
+| ~~Internal dev — truth~~ | *dropped 2026-09-11* | — | Doesn't fit anymore: dev laptops only have ~7 GB usable RAM (confirmed, not the 16 GB total), under `standard_08_GB`'s own 7.45 GiB requirement before any other overhead. Truth-validation now happens exclusively on AWS (§6.3), which already runs the full DB as its primary tier — no redundant/smaller local truth tier needed. |
 | **AWS deployment test (primary)** | full `k2_standard_20260626` (79.6 GiB dl) | 103.1 GiB | The real target, per owner decision: same mock **plus a spiked rare-taxa negative control** (reads from taxa present in the full DB but absent from the capped build, identified via `kraken2-inspect` taxid comparison) — measures what a capped DB would miss, on real full-scale classification |
 | AWS capped-DB comparison (secondary, same box/session) | `k2_standard_16_GB` / `k2_pluspf_16_GB` (11.2 GiB dl) | 14.9 GiB | Run on the same instance right after the full-DB run (DB already on disk via `bin/download-dbs.sh`) — gives the prod-candidate numbers to compare against full-DB truth, at near-zero extra cost |
 | Prod (default) | `k2_standard_16_GB` or `k2_pluspf_16_GB` | 14.9 GiB | Owner rule: RAM is for calculations, not the DB — the capped-vs-full comparison above is what justifies keeping (or overriding) this default |
@@ -297,6 +298,12 @@ Build = compose nf-core modules/subworkflows + add Bowtie2 host depletion and me
 | 5 — UI tests | The thin Streamlit app: launch a run, watch status, open reports | Manual on dev; smoke before every handover |
 
 **Debugging toolkit** (native Nextflow): `nextflow log`, `-with-trace/-with-report/-with-timeline/-with-dag`, `-dump-channels` (data-flow issues), `workDir` inspection (exact task inputs), `-resume` (iterate cheaply), `-process.debug`. MultiQC as QC gate: fastp/FastQC metrics distinguish data problems from pipeline problems early.
+
+**Self-contained debug artifact — crucial requirement (owner, 2026-09-11).** Every run must produce a single, readable file that explains what happened well enough to diagnose an issue *without reproducing it* — not scattered raw Nextflow output someone has to dig through (this was written after exactly that happened debugging the M1 skeleton's resource-limit config). Two parts, both required, not optional polish:
+1. **`bin/run.sh` always captures full stdout/stderr** to a dated log file (`logs/run_<timestamp>.log`) regardless of outcome — covers failures *before* Nextflow's own completion handler can fire (e.g. config parse errors).
+2. **A `workflow.onComplete`/`onError` handler in `main.nf`** writes a structured run-summary (`results/run-report/run_<timestamp>.md` or similar) on every run: command line, profile/params used, success/failure, duration, and on failure — the failed process name, exit code, error message, and work-dir path (`workflow.errorMessage`, `workflow.errorReport`, `task.workDir` equivalents) — plus links to the trace/report/timeline files, not a replacement for them.
+
+Applies from M1 onward, not deferred to a later phase.
 
 ### 6.3 Multi-machine & AWS workflow
 

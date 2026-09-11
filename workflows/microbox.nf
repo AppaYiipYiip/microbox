@@ -1,9 +1,10 @@
-include { FASTP          } from '../modules/nf-core/fastp/main'
-include { FASTQC         } from '../modules/nf-core/fastqc/main'
-include { BOWTIE2_BUILD  } from '../modules/nf-core/bowtie2/build/main'
-include { BOWTIE2_ALIGN  } from '../modules/nf-core/bowtie2/align/main'
-include { MEGAHIT        } from '../modules/nf-core/megahit/main'
-include { MULTIQC        } from '../modules/nf-core/multiqc/main'
+include { FASTP            } from '../modules/nf-core/fastp/main'
+include { FASTQC           } from '../modules/nf-core/fastqc/main'
+include { BOWTIE2_BUILD    } from '../modules/nf-core/bowtie2/build/main'
+include { BOWTIE2_ALIGN    } from '../modules/nf-core/bowtie2/align/main'
+include { MEGAHIT          } from '../modules/nf-core/megahit/main'
+include { KRAKEN2_KRAKEN2  } from '../modules/nf-core/kraken2/kraken2/main'
+include { MULTIQC          } from '../modules/nf-core/multiqc/main'
 
 workflow MICROBOX {
 
@@ -24,7 +25,7 @@ workflow MICROBOX {
     // no tool hardcoded"). Host genome is always a runtime parameter
     // (params.host_fasta), never bundled - PLAN.md §6.1 owner answer #5
     // ("host organism unknown, different animal species").
-    ch_bowtie2_log = Channel.empty()
+    ch_bowtie2_log    = Channel.empty()
     ch_depleted_reads = FASTP.out.reads
 
     if (!params.skip_host_removal) {
@@ -42,14 +43,6 @@ workflow MICROBOX {
         ch_depleted_reads = BOWTIE2_ALIGN.out.fastq
     }
 
-    ch_multiqc_files = FASTP.out.json.map { meta, f -> f }
-        .mix(FASTQC.out.zip.map { meta, f -> f })
-        .mix(ch_bowtie2_log)
-        .collect()
-        .map { files -> [ [ id: 'multiqc' ], files, [], [], [], [] ] }
-
-    MULTIQC(ch_multiqc_files)
-
     // Assembly - de novo, no reference/DB needed. MEGAHIT wants reads1/reads2
     // as two SEPARATE path lists (not one combined [r1,r2] list like every
     // other module so far) - easy to get wrong, worth the explicit comment.
@@ -58,6 +51,35 @@ workflow MICROBOX {
             meta.single_end ? [ meta, reads, [] ] : [ meta, [ reads[0] ], [ reads[1] ] ]
         }
     )
+
+    // Taxonomic classification - runs on the depleted READS (standard
+    // metagenomics practice, e.g. nf-core/taxprofiler), not on MEGAHIT's
+    // contigs; the two stages are independent, not sequential. Off by
+    // default (params.skip_kraken2 = true) even in the test profile: unlike
+    // every other test fixture so far (plain URLs Nextflow stages directly),
+    // the Kraken2 DB is a whole directory that needs a separate one-time
+    // `bin/download-dbs.sh` run first - keeping the zero-setup test profile
+    // zero-setup was judged more valuable than testing this by default.
+    ch_kraken2_report = Channel.empty()
+
+    if (!params.skip_kraken2) {
+        KRAKEN2_KRAKEN2(
+            ch_depleted_reads,
+            file(params.kraken2_db, checkIfExists: true, type: 'dir'),
+            false, // save_output_fastqs
+            false  // save_reads_assignment
+        )
+        ch_kraken2_report = KRAKEN2_KRAKEN2.out.report.map { meta, f -> f }
+    }
+
+    ch_multiqc_files = FASTP.out.json.map { meta, f -> f }
+        .mix(FASTQC.out.zip.map { meta, f -> f })
+        .mix(ch_bowtie2_log)
+        .mix(ch_kraken2_report)
+        .collect()
+        .map { files -> [ [ id: 'multiqc' ], files, [], [], [], [] ] }
+
+    MULTIQC(ch_multiqc_files)
 
     emit:
     depleted_reads = ch_depleted_reads   // channel: [ meta, [ reads ] ] - host-depleted (or just trimmed, if skipped) reads

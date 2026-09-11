@@ -2,7 +2,7 @@
 
 Living tracker so nothing found during development gets lost across machines/sessions. Two sections: **Fixed** (why the code looks the way it does — don't "clean up" these without understanding why they're there) and **Open** (still needs doing, pick these up on any machine).
 
-Last updated: 2026-09-11 (added #9, MEGAHIT/workDir).
+Last updated: 2026-09-11 (added #10, CLI boolean params).
 
 ---
 
@@ -44,6 +44,8 @@ Last updated: 2026-09-11 (added #9, MEGAHIT/workDir).
 8. **Non-interactive `sudo` gotchas while scripting the WSL2 setup** (not a pipeline bug, but cost real time): piping the wrong content into `sudo -S` (once fed it a config file's contents instead of the password, since two things were chained through the same pipe); git-bash's MSYS path conversion silently mangling `/mnt/c/...` WSL-internal paths into broken Windows paths when passed as arguments to `wsl.exe`. **Fixes:** always pipe the password directly and only the password into `sudo -S`; run `MSYS_NO_PATHCONV=1` before any `wsl.exe` call that takes a Unix-style path argument; prefer writing multi-step setup logic to an actual `.sh` file and executing that, rather than long inline multi-line strings.
 
 9. **MEGAHIT crashed with `OSError: [Errno 95] Operation not supported` calling `os.mkfifo()`.** The Windows-mounted filesystem WSL2 exposes at `/mnt/c/...` doesn't support Unix named pipes, which MEGAHIT uses internally — a correctness issue, not just the performance one `docs/planning/PLAN.md` §2.3 originally flagged for this same "keep workDir off `/mnt/c`" rule. **Fix:** `nextflow.config` now sets `workDir = "${System.getProperty('user.home')}/nf-work"` (portable — no hardcoded username). **Loose end, not fully explained:** a second, different symptom — a broken `export PATH=...` in the generated task script (`export: 'marouane/GUI': not a valid identifier`, from the repo path containing spaces) — also disappeared once the work dir moved off `/mnt/c`, but the repo itself is still on that space-containing Windows path, so it's not obvious why that specific symptom went away. Worth re-testing if PATH-related task failures ever resurface.
+
+10. **Boolean CLI params silently don't work** (`--skip_kraken2 false` had no effect — the pipeline ran as if it was still `true`). Confirmed as a known Nextflow 26.04+ regression, not a mistake in our config: under the strict syntax parser (default since 26.04), every CLI-supplied param arrives as a plain string, and `!params.skip_kraken2` on the string `"false"` evaluates `false` (non-empty strings are truthy in Groovy) — so the `if` branch that should have run never does. **Fix:** always use `-params-file some.yaml` (which preserves real YAML types) for anything boolean, never bare `--flag true|false` on the command line. `bin/run.sh` already only ever uses `-params-file`, so this doesn't affect normal use — it only bit ad-hoc CLI testing while developing this milestone.
 
 ---
 

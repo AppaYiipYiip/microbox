@@ -332,6 +332,8 @@ pipeline/
 └── docs/                   # runbook, tool-addition guide, decision log
 ```
 
+**Open TODO (owner, 2026-09-11):** `bin/setup-dev.sh` and `bin/download-dbs.sh` exist and are verified (M1-M3 milestones). **`bin/setup-aws.sh` and a production setup script still need writing** — deliberately not built yet (would be guessing blind before actually touching AWS/prod), but each environment needs its own script, not one universal installer: WSL2-specific steps (DNS fix, `wsl.exe`, Docker Desktop's GUI toggle) don't apply on a Linux EC2 box or a prod VM running Docker Engine directly. Pick these up when the AWS phase (§6.3) actually starts.
+
 Run: `nextflow run main.nf -profile prod -params-file params/prod.yaml -resume` → `results/<sample>/...` + MultiQC report + Geneious staging copy. Scaffold with `nf-core create` (lint + CI templates included); `nf-core modules install` for maintained modules.
 
 - **Non-expert entry points:** `./bin/run.sh <samples.csv> --profile <env>` — a thin wrapper over `nextflow run` with sane defaults; `./bin/run-ui.sh` — starts the thin Streamlit UI (choose samplesheet → Run → open reports). The company's team never types Nextflow flags.

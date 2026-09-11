@@ -5,6 +5,7 @@ include { BOWTIE2_ALIGN    } from '../modules/nf-core/bowtie2/align/main'
 include { MEGAHIT          } from '../modules/nf-core/megahit/main'
 include { KRAKEN2_KRAKEN2  } from '../modules/nf-core/kraken2/kraken2/main'
 include { BRACKEN_BRACKEN  } from '../modules/nf-core/bracken/bracken/main'
+include { QUAST            } from '../modules/nf-core/quast/main'
 include { MULTIQC          } from '../modules/nf-core/multiqc/main'
 
 workflow MICROBOX {
@@ -88,11 +89,29 @@ workflow MICROBOX {
         }
     }
 
+    // Assembly QC - metagenomic assembly has no single reference genome to
+    // compare against (it's a mixed community, not one organism), so fasta/
+    // gff stay empty; QUAST falls back to reference-free stats (N50, contig
+    // count, etc.). Independently skippable, on by default like MEGAHIT
+    // (no external DB, nothing stopping it running in the zero-setup test
+    // profile).
+    ch_quast_tsv = Channel.empty()
+
+    if (!params.skip_quast) {
+        QUAST(
+            MEGAHIT.out.contigs,
+            [ [ id: 'none' ], [] ], // no reference fasta
+            [ [ id: 'none' ], [] ]  // no reference gff
+        )
+        ch_quast_tsv = QUAST.out.tsv.map { meta, f -> f }
+    }
+
     ch_multiqc_files = FASTP.out.json.map { meta, f -> f }
         .mix(FASTQC.out.zip.map { meta, f -> f })
         .mix(ch_bowtie2_log)
         .mix(ch_kraken2_report)
         .mix(ch_bracken_report)
+        .mix(ch_quast_tsv)
         .collect()
         .map { files -> [ [ id: 'multiqc' ], files, [], [], [], [] ] }
 

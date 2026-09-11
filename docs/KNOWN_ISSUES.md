@@ -2,7 +2,7 @@
 
 Living tracker so nothing found during development gets lost across machines/sessions. Two sections: **Fixed** (why the code looks the way it does — don't "clean up" these without understanding why they're there) and **Open** (still needs doing, pick these up on any machine).
 
-Last updated: 2026-09-11 (added #11, Bracken threshold; corrected #9's wrong conclusion).
+Last updated: 2026-09-11 (added #12, the host_fasta test-fixture design flaw).
 
 ---
 
@@ -49,6 +49,8 @@ Last updated: 2026-09-11 (added #11, Bracken threshold; corrected #9's wrong con
 10. **Boolean CLI params silently don't work** (`--skip_kraken2 false` had no effect — the pipeline ran as if it was still `true`). Confirmed as a known Nextflow 26.04+ regression, not a mistake in our config: under the strict syntax parser (default since 26.04), every CLI-supplied param arrives as a plain string, and `!params.skip_kraken2` on the string `"false"` evaluates `false` (non-empty strings are truthy in Groovy) — so the `if` branch that should have run never does. **Fix:** always use `-params-file some.yaml` (which preserves real YAML types) for anything boolean, never bare `--flag true|false` on the command line. `bin/run.sh` already only ever uses `-params-file`, so this doesn't affect normal use — it only bit ad-hoc CLI testing while developing this milestone.
 
 11. **Bracken failed with `Error: no reads found` against the test fixture.** Not a bug — Bracken's default minimum-read threshold (`-t 10` at species level) is a sensible real-data default, but our mechanics-only test fixture has exactly 2 classified reads total, so no threshold above 2 can ever pass regardless of taxonomic level chosen. **Fix, scoped to avoid masking the real default:** `conf/test.config` sets `ext.args = '-t 1'` for `BRACKEN_BRACKEN` only inside the `test` profile — production/real runs keep Bracken's actual default. Proves the wiring works; says nothing about real-world accuracy (same mechanics-vs-truth-validation distinction `docs/planning/PLAN.md` §2.3 already draws elsewhere).
+
+12. **QUAST failed with "doesn't contain contigs >= 500 bp" — and lowering the threshold didn't fix it either.** Real root cause, not a threshold issue: `conf/test.config`'s `host_fasta` originally pointed at the *same* SARS-CoV-2 genome family the test reads are drawn from, so Bowtie2 depleted ~98% of reads as "host" (2 of 99 survived) — too little data for MEGAHIT to assemble anything (0 contigs), which cascaded into QUAST having nothing to measure at any threshold. **Fix:** `host_fasta` now points at lambda phage (NC_001416.1, NCBI) — a small, standard, genuinely *unrelated* reference. Result: 0% alignment (correct — proves non-host reads pass through unchanged), full 99 reads reach assembly, MEGAHIT produces 12 real contigs. **Lesson for future fixtures:** a host-depletion test needs a reference that *doesn't* match the read data, or it silently breaks every stage downstream of depletion in a way that looks like each stage's own bug.
 
 ---
 

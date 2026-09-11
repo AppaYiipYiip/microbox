@@ -2,6 +2,7 @@ include { FASTP          } from '../modules/nf-core/fastp/main'
 include { FASTQC         } from '../modules/nf-core/fastqc/main'
 include { BOWTIE2_BUILD  } from '../modules/nf-core/bowtie2/build/main'
 include { BOWTIE2_ALIGN  } from '../modules/nf-core/bowtie2/align/main'
+include { MEGAHIT        } from '../modules/nf-core/megahit/main'
 include { MULTIQC        } from '../modules/nf-core/multiqc/main'
 
 workflow MICROBOX {
@@ -49,7 +50,17 @@ workflow MICROBOX {
 
     MULTIQC(ch_multiqc_files)
 
+    // Assembly - de novo, no reference/DB needed. MEGAHIT wants reads1/reads2
+    // as two SEPARATE path lists (not one combined [r1,r2] list like every
+    // other module so far) - easy to get wrong, worth the explicit comment.
+    MEGAHIT(
+        ch_depleted_reads.map { meta, reads ->
+            meta.single_end ? [ meta, reads, [] ] : [ meta, [ reads[0] ], [ reads[1] ] ]
+        }
+    )
+
     emit:
-    depleted_reads = ch_depleted_reads // channel: [ meta, [ reads ] ] - host-depleted (or just trimmed, if skipped) reads for the next stage (assembly)
+    depleted_reads = ch_depleted_reads   // channel: [ meta, [ reads ] ] - host-depleted (or just trimmed, if skipped) reads
+    contigs        = MEGAHIT.out.contigs // channel: [ meta, contigs.fa.gz ]
     multiqc_report = MULTIQC.out.report
 }

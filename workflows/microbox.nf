@@ -4,6 +4,7 @@ include { BOWTIE2_BUILD    } from '../modules/nf-core/bowtie2/build/main'
 include { BOWTIE2_ALIGN    } from '../modules/nf-core/bowtie2/align/main'
 include { MEGAHIT          } from '../modules/nf-core/megahit/main'
 include { KRAKEN2_KRAKEN2  } from '../modules/nf-core/kraken2/kraken2/main'
+include { BRACKEN_BRACKEN  } from '../modules/nf-core/bracken/bracken/main'
 include { MULTIQC          } from '../modules/nf-core/multiqc/main'
 
 workflow MICROBOX {
@@ -61,21 +62,37 @@ workflow MICROBOX {
     // `bin/download-dbs.sh` run first - keeping the zero-setup test profile
     // zero-setup was judged more valuable than testing this by default.
     ch_kraken2_report = Channel.empty()
+    ch_bracken_report = Channel.empty()
 
     if (!params.skip_kraken2) {
+        ch_kraken2_db = file(params.kraken2_db, checkIfExists: true, type: 'dir')
+
         KRAKEN2_KRAKEN2(
             ch_depleted_reads,
-            file(params.kraken2_db, checkIfExists: true, type: 'dir'),
+            ch_kraken2_db,
             false, // save_output_fastqs
             false  // save_reads_assignment
         )
         ch_kraken2_report = KRAKEN2_KRAKEN2.out.report.map { meta, f -> f }
+
+        // Bracken re-estimates abundance from Kraken2's report - needs the
+        // *same* DB directory, which the pre-built genome-idx downloads
+        // already ship the required *.kmer_distrib files for (no separate
+        // bracken-build step). Depends on Kraken2 having run, so nested
+        // here rather than given its own top-level `if`; still independently
+        // skippable (params.skip_bracken) if someone wants classification
+        // without abundance re-estimation.
+        if (!params.skip_bracken) {
+            BRACKEN_BRACKEN(KRAKEN2_KRAKEN2.out.report, ch_kraken2_db)
+            ch_bracken_report = BRACKEN_BRACKEN.out.txt.map { meta, f -> f }
+        }
     }
 
     ch_multiqc_files = FASTP.out.json.map { meta, f -> f }
         .mix(FASTQC.out.zip.map { meta, f -> f })
         .mix(ch_bowtie2_log)
         .mix(ch_kraken2_report)
+        .mix(ch_bracken_report)
         .collect()
         .map { files -> [ [ id: 'multiqc' ], files, [], [], [], [] ] }
 

@@ -29,6 +29,13 @@ nextflow_pipeline {
             assert path("${outputDir}/bowtie2/align").exists()
             assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
             assert path("${outputDir}/quast/test.tsv").exists()
+            // Checks QUAST data actually reached the MultiQC *report content*,
+            // not just that quast/test.tsv exists on disk as a side output -
+            // these are NOT the same thing (found the hard way: QUAST's
+            // renamed test.tsv symlink isn't what MultiQC's QUAST module
+            // recognizes; only QUAST.out.results/report.tsv is - see
+            // workflows/microbox.nf and docs/KNOWN_ISSUES.md).
+            assert path("${outputDir}/multiqc/multiqc_data/multiqc_general_stats.txt").text.contains("quast")
             // Kraken2/Bracken are opt-in (skip_kraken2 defaults true) - the
             // default run must NOT produce them, proving the skip flag
             // actually skips, not just defaults to "off" in name only.
@@ -123,9 +130,16 @@ nextflow_pipeline {
         }
     }
 
-    test("contigs: skip_quast=true - pipeline still completes with nothing but MultiQC") {
+    test("contigs: skip_quast=true - nothing left to analyze, fails with a clear message (not a MultiQC crash)") {
         tag "basic"
 
+        // Real degenerate case, not hypothetical: contigs input + QUAST off
+        // + Kraken2 off (its default) leaves genuinely nothing to run.
+        // workflows/microbox.nf catches this explicitly (.ifEmpty{ error
+        // "..." }) rather than letting it reach MultiQC and fail with
+        // MultiQC's own opaque "no analysis results found" - this test
+        // exists to make sure that guard stays in place, not to prove the
+        // pipeline "succeeds" doing nothing.
         when {
             params {
                 outdir     = "$outputDir"
@@ -136,9 +150,8 @@ nextflow_pipeline {
         }
 
         then {
-            assert workflow.success
-            assert !path("${outputDir}/quast").exists()
-            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+            assert !workflow.success
+            assert workflow.stdout.toString().contains("Nothing enabled to analyze or report")
         }
     }
 
@@ -204,9 +217,15 @@ nextflow_pipeline {
         }
     }
 
-    test("contigs: Kraken2 classifies contigs directly (not reads) when enabled") {
+    test("contigs: Kraken2 classifies contigs directly (not reads) when enabled; Bracken auto-skips") {
         tag "requires_db"
 
+        // Bracken defaults to ON (skip_bracken=false) but must NOT run here -
+        // confirmed the hard way that it crashes on contigs (its kmer_distrib
+        // files assume ~100bp reads, not whole assembled sequences), so
+        // workflows/microbox.nf force-skips it for input_type=contigs
+        // regardless of the flag. This test exists to make sure that guard
+        // stays in place.
         when {
             params {
                 outdir       = "$outputDir"
@@ -220,6 +239,7 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert !path("${outputDir}/bracken").exists()
         }
     }
 

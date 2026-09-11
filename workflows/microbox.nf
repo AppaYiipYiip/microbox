@@ -111,13 +111,19 @@ workflow MICROBOX {
         // already ship the required *.kmer_distrib files for (no separate
         // bracken-build step). Depends on Kraken2 having run, so nested
         // here rather than given its own top-level `if`; still independently
-        // skippable (params.skip_bracken). Scientifically, Bracken's
-        // read-length-specific kmer distributions are a better fit for
-        // reads than variable-length contigs - allowed here mechanically
-        // (test-all-combinations, owner directive 2026-09-11) but treat
-        // contigs-mode Bracken output as a mechanics check, not a trusted
-        // abundance estimate.
-        if (!params.skip_bracken) {
+        // skippable (params.skip_bracken).
+        //
+        // Auto-skipped entirely for contigs input, regardless of
+        // skip_bracken's value - not just "less trustworthy" (the original
+        // assumption here), confirmed to genuinely CRASH: Bracken's
+        // kmer_distrib files assume ~100bp reads, and treating a whole
+        // assembled contig (tens of kb) as one "read" isn't just a bad fit,
+        // it breaks Bracken's abundance-redistribution math outright (a
+        // Python traceback, not a graceful error). Same pattern as
+        // skip_host_removal not applying to contigs input: an inapplicable
+        // combination is made to not-happen automatically, not left for the
+        // caller to discover by hitting a crash.
+        if (!params.skip_bracken && params.input_type != 'contigs') {
             BRACKEN_BRACKEN(KRAKEN2_KRAKEN2.out.report, ch_kraken2_db)
             ch_bracken_report = BRACKEN_BRACKEN.out.txt.map { meta, f -> f }
         }
@@ -127,7 +133,7 @@ workflow MICROBOX {
     // compare against (it's a mixed community, not one organism), so fasta/
     // gff stay empty; QUAST falls back to reference-free stats (N50, contig
     // count, etc.). Independently skippable, on by default (no external DB).
-    ch_quast_tsv = Channel.empty()
+    ch_quast_results = Channel.empty()
 
     if (!params.skip_quast) {
         QUAST(
@@ -135,13 +141,30 @@ workflow MICROBOX {
             [ [ id: 'none' ], [] ], // no reference fasta
             [ [ id: 'none' ], [] ]  // no reference gff
         )
-        ch_quast_tsv = QUAST.out.tsv.map { meta, f -> f }
+        // MultiQC's QUAST module looks for a file literally named
+        // report.tsv - QUAST.out.tsv is a renamed *convenience* symlink
+        // (${prefix}.tsv, e.g. test.tsv) that MultiQC does NOT recognize.
+        // Found the hard way: QUAST's data was silently absent from every
+        // MultiQC report so far (including milestones already called
+        // "verified") - it only became visible once a test ran with QUAST
+        // as the *only* multiqc input and MultiQC had nothing else to mask
+        // the gap. QUAST.out.results (the whole directory, correctly-named
+        // report.tsv inside it) is what actually needs to feed MultiQC.
+        ch_quast_results = QUAST.out.results.map { meta, dir -> dir }
     }
 
     ch_multiqc_files = ch_multiqc_files
         .mix(ch_kraken2_report)
         .mix(ch_bracken_report)
-        .mix(ch_quast_tsv)
+        .mix(ch_quast_results)
+        // A real, reachable degenerate case, not hypothetical: input_type
+        // contigs + skip_quast + Kraken2 left off (its default) leaves
+        // nothing at all for MultiQC to summarize. Caught here with a clear,
+        // actionable message rather than letting MultiQC run anyway and fail
+        // with its own opaque "no analysis results found" - same
+        // self-contained-diagnostics principle as the run-report (main.nf),
+        // just enforced earlier, before a confusing failure instead of after.
+        .ifEmpty { error "Nothing enabled to analyze or report: check input_type, skip_quast, and skip_kraken2 - at least one analysis stage must run." }
         .collect()
         .map { files -> [ [ id: 'multiqc' ], files, [], [], [], [] ] }
 

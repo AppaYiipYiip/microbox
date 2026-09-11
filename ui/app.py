@@ -17,8 +17,8 @@ MULTIQC_REPORT = REPO_ROOT / "results" / "multiqc" / "multiqc_report.html"
 UPLOAD_DIR = REPO_ROOT / "assets" / "uploads"
 LOG_PATH = REPO_ROOT / ".streamlit_run.log"
 
-st.set_page_config(page_title="metabox", page_icon="\U0001f9ec", layout="centered")
-st.title("metabox")
+st.set_page_config(page_title="microbox", page_icon="\U0001f9ec", layout="centered")
+st.title("microbox")
 st.caption("Drop a samplesheet, click Run, open the report when it's done.")
 
 st.session_state.setdefault("proc", None)

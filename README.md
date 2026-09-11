@@ -1,6 +1,4 @@
-# metabox
-
-*(working name — not final, see `docs/planning/PLAN.md` §6.5)*
+# microbox
 
 A modular, GUI-agnostic bioinformatics pipeline toolbox for metagenomics. Every tool runs in its own pinned Docker container, orchestrated by [Nextflow](https://nextflow.io) using [nf-core](https://nf-co.re) modules where available. The default pipeline (fastp → FastQC → host depletion → assembly → taxonomic classification → viral analysis → MultiQC) is one composition out of a growing library of modules — any module can be an entry point or an exit point.
 

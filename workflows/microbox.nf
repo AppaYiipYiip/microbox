@@ -2,7 +2,7 @@ include { FASTP   } from '../modules/nf-core/fastp/main'
 include { FASTQC  } from '../modules/nf-core/fastqc/main'
 include { MULTIQC } from '../modules/nf-core/multiqc/main'
 
-workflow METABOX {
+workflow MICROBOX {
 
     take:
     ch_samplesheet // channel: [ meta, [ fastq_1, (fastq_2) ] ]

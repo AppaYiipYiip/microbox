@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema",
-  "$id": "https://raw.githubusercontent.com/marouanestage773/metabox/main/assets/schema_input.json",
-  "title": "metabox pipeline - params.input schema",
+  "$id": "https://raw.githubusercontent.com/AppaYiipYiip/microbox/main/assets/schema_input.json",
+  "title": "microbox pipeline - params.input schema",
   "description": "Schema for the samplesheet passed to --input",
   "type": "array",
   "items": {

@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 
-include { METABOX } from './workflows/metabox'
+include { MICROBOX } from './workflows/microbox'
 
 workflow {
 
@@ -15,5 +15,5 @@ workflow {
             [ meta, reads ]
         }
 
-    METABOX(ch_samplesheet)
+    MICROBOX(ch_samplesheet)
 }

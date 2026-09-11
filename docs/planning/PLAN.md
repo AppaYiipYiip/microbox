@@ -479,6 +479,36 @@ The owner described a workflow: save the result after every node so the pipeline
 
    **Honest technical read, since the owner explicitly asked "if that's not feasible in streamlit we can do it in another library":** a real Figma-style node-and-connector canvas — smooth dragging, live connector lines, click-to-select, a properties panel — is fundamentally a client-side interactive-graphics problem. Streamlit's whole model (Python re-runs the entire script top-to-bottom on every interaction, server-rendered) is a poor natural fit for that specific interaction pattern, even though third-party Streamlit components attempting it exist (e.g. wrappers around React Flow) — they're less mature than the JS ecosystem's purpose-built tools and tend to feel laggy compared to a native implementation. The tool actually built for this job is **React Flow** (a mature, widely-used node-editor library — what tools like n8n's visual builder are built on), which means a proper implementation is realistically a **separate small React frontend**, not an extension of the Streamlit app — a genuinely bigger stack decision (a JS build pipeline, a different skill-set to maintain long-term) than anything built so far, worth weighing deliberately rather than defaulting into.
 
+### 6.11 Multi-page UI requirements — brainstormed 2026-09-11, needs study, NOT scoped or built
+
+Same status as §6.10: a requirements brainstorm, not a design or implementation plan. Core principle, stated by the owner this round: the pipeline *engine* stays GUI-agnostic (§7 Option B — runs identically via CLI), but that was never meant to mean opaque. The GUI's job is to make the pipeline **fully inspectable and operable without feeling like a blackbox** — and a lot of what got built this session already produces exactly the data a UI could surface, without anyone framing it as a UI requirement at the time: the FAIR run-report (`results/run-report/run_<ts>.md` — run ID, session ID, git revision, full params dump, tool versions, written by `main.nf`'s `onComplete`/`onError` sections), Nextflow's trace/report/timeline files, and `docs/KNOWN_ISSUES.md`'s whole transparency culture.
+
+**The owner's two starting ideas, validated:**
+
+- **Pipeline page** — click a node to open a parameter dialog, hover for a tooltip showing current values. A sound, standard pattern (matches node-based editors generally — Blender's shader editor, n8n, ComfyUI). Refinements to weigh when this is actually designed, not decided now: tooltips should show *current* values, not defaults; nodes need a visual distinction between default and user-overridden parameters; node state (enabled/skipped/incompatible-connection, tying into §6.10's type-compatibility requirement) needs to be visible, not just silently enforced; modal dialog vs. a persistent side panel is open; and *building/saving a pipeline configuration* (a template, no samples) is arguably a different thing from *launching a run* (template + samplesheet + go) — could be one page or two.
+
+- **History page** — past runs, rename/copy/duplicate/delete, internally referenced by a unique ID. This maps almost exactly onto data that already exists: `workflow.runName`/`workflow.sessionId` are already captured in every run-report, so "unique ID" isn't new work, just a UI over what's already there. Clicking into a run should open a **Run Detail view** — embed the MultiQC report, show the run-report's provenance section as-is, link to trace/timeline/report.html, and on failure surface the already-captured error text directly instead of a generic "run failed." This is where "not a blackbox" pays off most directly for work already done.
+
+**Other pages brainstormed (unprioritized, not scoped):**
+
+| Page | Why |
+|---|---|
+| Dashboard / Home | Recent runs, quick-launch, one-line environment health so problems surface before a run is attempted, not after |
+| Databases / References | UI over `bin/download-dbs.sh` — what's downloaded, checksum status, trigger a new download with visible progress. Plausibly higher-value than it sounds: most of this session's friction was DB/environment management, not the pipeline itself |
+| Environment / System Health | Docker daemon status, Nextflow/Java versions, disk space, WSL distro status — directly informed by lived experience this session (`docs/KNOWN_ISSUES.md` is full of exactly this class of problem) |
+| Module / Tool Library | Every available tool module, its pinned container tag/version, a short description — lets an R&D scientist see exactly what ran without reading `workflows/microbox.nf` |
+| Samplesheet Manager | Form/table UI to build a samplesheet against `assets/schema_input*.json` instead of hand-writing CSV |
+| Compare runs | Possibly a History feature, not its own page — diff two runs' params and matching-stage tables (e.g. Kraken2/Bracken) side by side, for "did we get consistent results" trust-building |
+| Export | UI action (likely from Run Detail) over the spec's `--geneious_export` concept |
+| Settings | Output directory, default profile, resource limits as form fields over what's currently YAML/CLI-only |
+| Help / Docs | README, a non-technical cut of `docs/KNOWN_ISSUES.md`, the runbook — so a non-expert can get unstuck without opening the repo |
+
+All of the above need a persistent nav element (sidebar/top bar) once there are more pages than tabs comfortably hold — not designed, just noted as a requirement once page count grows.
+
+**What an R&D team specifically needs, as a framing check (not engineering-driven):** launch a run without touching a CLI; trust the results (reports/tables presented clearly, not a pile of files); understand *what happened*, in plain language, when something fails; compare runs over time to build confidence the pipeline behaves consistently. Every page above maps to one of those four except Module Library and Databases, which are more "make the black box glass" for anyone curious, technical or not.
+
+**Explicitly not decided here:** which pages are must-have vs. nice-to-have for a first pass (deliberately unprioritized); Streamlit vs. another frontend stack for anything beyond the existing thin launcher (still §6.10's open, unresolved question); any interaction detail marked "open" above (modal vs. panel, exact nav layout, etc.).
+
    **Not scoped, not estimated, not started yet — still needs study, per the owner's own framing.** Open questions before it can be scoped: does the canvas need to be a general-purpose graph editor, or would a much simpler guided flow (pick tool A, pick tool B, see the resulting command, in the existing Streamlit app) satisfy the actual need at a fraction of the cost? Which parameter combinations are valid to expose per node (a raw parameter surface per tool is large and mostly not meant for a non-expert to touch directly)? How does "come back another day and edit step X" reconcile with runs already being immutable/hashed by Nextflow's own caching model? Does the canvas need to *generate* the actual Nextflow DSL2 wiring (a much bigger compiler-shaped problem), or just assemble CLI flags/a params file against the fixed pipeline shape that already exists? None of this is answered yet.
 
 ## 7. Key decision: platform choice (owner decision required)

@@ -10,14 +10,24 @@ import './DeletableEdge.css'
 // normal button directly), deleteElements from useReactFlow to remove it.
 // The X only renders when `selected` - "when clicking a node connection we
 // have an X", not a button visible on every edge all the time.
-export function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, selected }: EdgeProps<Edge>) {
+//
+// `data.invalid` is a purely visual, render-time overlay - PipelineCanvas
+// derives it from src/utils/validatePipeline.ts and injects it into a copy
+// of the edges array passed to <ReactFlow>, never into the actual edges
+// state (so it never leaks into the Save snapshot or the undo/redo history).
+export type DeletableEdgeData = { invalid?: boolean }
+
+export function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, selected, data }: EdgeProps<Edge<DeletableEdgeData>>) {
   const { t } = useTranslation()
   const { deleteElements } = useReactFlow()
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY })
+  const classNames = ['deletable-edge']
+  if (data?.invalid) classNames.push('deletable-edge--invalid')
+  if (selected) classNames.push('deletable-edge--selected')
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} className={selected ? 'deletable-edge deletable-edge--selected' : 'deletable-edge'} />
+      <BaseEdge id={id} path={edgePath} className={classNames.join(' ')} />
       {selected && (
         <EdgeLabelRenderer>
           <button

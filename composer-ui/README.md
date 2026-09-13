@@ -80,6 +80,22 @@ actually clicking through it, not from re-reading the requirements:
   (`multiSelectionActive`/`useKeyPress`), which a single click's `ctrlKey` flag never fires. Confirmed
   multi-select genuinely works by dispatching real `keydown`/`keyup` events around the clicks instead - a
   real user physically holding Ctrl hits the real listener, this only affects automated click simulation.
+- **Connections are validated against what the real pipeline can actually execute** (owner, 2026-09-13,
+  after asking about a saved canvas: "doesnt each node have a set of parametres... i see only input field
+  for paths" led into a bigger realization - the canvas let you draw connections the real fixed-backbone
+  pipeline structurally cannot run, e.g. QUAST → MaxBin2, or MEGAHIT → Kraken2 which looks plausible but
+  isn't real - fastq-entry Kraken2 always classifies reads, never an assembler's contigs). `src/data/
+  pipelineTopology.ts` is a hardcoded "what can actually feed what" map, grounded directly in
+  `workflows/microbox.nf`'s real channel wiring (every entry cites the specific behavior it's based on, not
+  guessed from tool names) - `src/utils/validatePipeline.ts` (unit-tested) checks every drawn edge against
+  it. Invalid connections render as a dashed amber line on the canvas (instead of the normal solid one) and
+  are listed in a warning banner above the canvas, translated, non-blocking (Save/interaction still work
+  fine - Run is already disabled for other reasons). Deliberately does **not** check whether a node has ALL
+  the inputs it needs (MaxBin2 genuinely requires both a contigs edge AND a reads edge simultaneously - a
+  node fed only one would still fail for real) - a known, documented gap, not an oversight; this pass only
+  checks "is each individual drawn connection real," which is what was asked for and what caught the actual
+  mistake in a real user-drawn graph. Verified live in-browser: recreating the user's own QUAST → MaxBin2
+  connection renders the dashed-amber edge and the exact warning text, in real time as the edge is drawn.
 - **Save and Run buttons** on the Composer toolbar. Save genuinely works client-side today — downloads a
   JSON snapshot of the canvas (node ids/types/positions/data including params, edge connections) via a
   `Blob` + `<a download>`. This is a real step toward §6.11's full export/import fidelity requirement, not
@@ -109,15 +125,18 @@ actually clicking through it, not from re-reading the requirements:
   remove a selected node and close its now-stale detail panel, real multi-select (Ctrl+click, using actual
   dispatched `keydown`/`keyup` events - see the testing-tool gotcha noted above) confirmed via the DOM to
   select both nodes, a drag of one multi-selected node confirmed to move the whole selection together, and
-  Delete confirmed to remove an entire multi-selection as a single undo step.
-- `npm test` (Vitest + React Testing Library, 31 tests) — i18n key-structure parity between `en.json`/
+  Delete confirmed to remove an entire multi-selection as a single undo step. Recreating the user's own
+  reported QUAST → MaxBin2 connection confirmed the dashed-amber edge and warning banner both appear, live.
+- `npm test` (Vitest + React Testing Library, 38 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
   handles with the correct fixed target/source roles, self-connection rejected by `isValidConnection`, the
   param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings, and
   the undo/redo stack (`src/utils/history.ts`) round-trips correctly, discards redo on a new change, and caps
-  its length.
+  its length, and `findInvalidEdges` (`src/utils/validatePipeline.ts`) accepts real dependencies, flags
+  connections that don't exist in the real pipeline (including two that look plausible but aren't - MEGAHIT
+  → Kraken2, metaSPAdes → MultiQC), and ignores edges with no incoming node.
 - `npm run build` — a real production build succeeds.
 - `npx tsc --noEmit` and `npm run lint` (oxlint) both clean.
 
@@ -149,9 +168,13 @@ there later; not yet included since this is still a prototype, not part of the s
   (`docs/planning/PLAN.md` §6.12).
 - **Save is a partial step, not §6.11's full requirement.** It downloads node/edge structure, positions, and
   per-node params, but there's no matching Import/load path at all, and no schema-version migration story.
-- **Does not enforce type-compatibility between connected nodes** — any node can currently connect to any
-  other node on the canvas. §6.10's confirmed requirement (the Bracken/contigs-report bug) is not yet
-  implemented.
+- **Validation is a warning, not enforcement** — any node can still be connected to any other node on the
+  canvas; invalid connections (per `src/data/pipelineTopology.ts`) get a dashed-amber edge and a banner
+  entry, but nothing blocks drawing or saving them. §6.10's confirmed requirement (the Bracken/contigs-report
+  bug) still isn't structurally prevented, just flagged.
+- **Validation checks individual edges only, not whether a node has ALL the inputs it needs** — e.g. MaxBin2
+  genuinely requires both a contigs edge and a reads edge simultaneously in the real pipeline; a MaxBin2 node
+  fed only one (even a "valid" one) would still fail for real, and the composer doesn't catch that yet.
 - **Home and Run History are honest placeholders** — real pages/routes, but no real run data, since there's
   no backend to report it from.
 - **Undo/redo doesn't cover every kind of edit** — node add/delete/duplicate/connect and node/selection drags

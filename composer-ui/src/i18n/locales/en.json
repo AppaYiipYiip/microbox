@@ -25,7 +25,10 @@
     "deleteConnection": "Delete connection",
     "undo": "Undo",
     "redo": "Redo",
-    "duplicate": "Duplicate"
+    "duplicate": "Duplicate",
+    "invalidConnections_one": "{{count}} connection doesn't match how the real pipeline works:",
+    "invalidConnections_other": "{{count}} connections don't match how the real pipeline works:",
+    "invalidConnectionsHint": "The real pipeline is a fixed sequence of stages, not a freely connectable graph - these wouldn't run as drawn."
   },
   "history": {
     "title": "Run History",

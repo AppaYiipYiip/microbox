@@ -12,6 +12,13 @@ gave every node a consistent default size instead of growing with content, and m
 React Flow's `NodeResizer` — test suite grew from 18 to 25, see "Composer canvas corrected to 4
 fixed-direction handles..." and "Node sizing/resize + a real connection-color bug..." below; a broader,
 not-yet-scoped "many quality of life elements" request was logged as Open #8 rather than guessed at.
+**Composer canvas connections now validated against the real pipeline's fixed backbone** — the owner's own
+saved canvas export had connections the real pipeline structurally can't execute (e.g. QUAST → MaxBin2);
+added a hardcoded topology map grounded in `workflows/microbox.nf`'s actual channel wiring, with invalid
+edges shown dashed-amber plus a warning banner, non-blocking. Also confirmed the composer's param panel
+already faithfully mirrors the only real per-tool params (`host_fasta`/`kraken2_db`/`genomad_db`/
+`checkv_db` - all paths, verified against `nextflow.config` directly). See "Composer canvas: connections
+validated against the real pipeline's fixed backbone..." below.
 **Pavian added to the composer canvas's node palette** — the owner noticed it was missing from the composer
 even though it already existed as a standalone tool in the main pipeline; added to the "reporting" category
 alongside MultiQC, with an honest note that it's not a DAG step. See "Pavian added to the composer canvas's
@@ -454,5 +461,38 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   Pavian appears under "Rapport"/"Reporting" with a real FR/EN-translated description and drops onto the
   canvas as a normal 4-handle node like every other tool. Test suite unaffected (31/31 still pass, the
   generic i18n-key-resolution test in `toolCatalog.test.ts` covers any newly added tool automatically).
+
+- **Composer canvas: connections validated against the real pipeline's fixed backbone, 2026-09-13** (owner,
+  looking at a saved canvas export with 10 nodes and branching/merging connections: "in this pipeline for
+  example, i would expect 3 different results, right?... doesnt each node have a set of parametres... i see
+  only input field for paths"). Answering that surfaced the actual, more important gap: `workflows/
+  microbox.nf` is a **fixed backbone** with independently skippable stages, not a freely reorderable/
+  mergeable DAG (already documented above, "Full toolbox combinatorics enumerated" entry) - but the composer
+  canvas let a user draw ANY connection with zero validation, including several from the owner's own real
+  saved graph that the pipeline structurally cannot execute: QUAST → MaxBin2 (QUAST's output is a terminal
+  report, MaxBin2 needs contigs+reads directly from the assembler/Bowtie2), and FastQC feeding Kraken2 in
+  parallel with the fastp→Bowtie2 branch (FastQC's output is a report, nothing downstream). Also confirmed
+  by reading `nextflow.config` directly, in response to the params question: the only non-boolean per-tool
+  params in the whole pipeline ARE `host_fasta`/`kraken2_db`/`genomad_db`/`checkv_db` - all paths - so the
+  composer's param panel (added in the earlier 2026-09-13 round) was already a faithful, complete mirror of
+  what's real, not an under-built UI; nothing needed to change there. **Fix**: `src/data/
+  pipelineTopology.ts` - a hardcoded `Record<toolId, toolId[]>` "what can actually feed what" map, each
+  entry citing the specific `workflows/microbox.nf` channel-wiring behavior it's grounded in (not guessed
+  from tool names - e.g. MEGAHIT → Kraken2 looks plausible but is NEVER valid: fastq-entry Kraken2 always
+  classifies `ch_depleted_reads`, never an assembler's contigs, confirmed by reading the
+  `ch_classify_input_raw` ternary directly). `src/utils/validatePipeline.ts`'s pure, unit-tested
+  `findInvalidEdges()` checks every drawn edge against it; `ComposerPage.tsx` computes this via `useMemo` and
+  renders invalid edges as a dashed-amber line (`DeletableEdge.tsx`'s `data.invalid`, injected into a
+  render-only copy of the edges array in `PipelineCanvas.tsx` - never into the real edges state, so it never
+  leaks into the Save snapshot or undo/redo history) plus a translated, non-blocking warning banner above
+  the canvas listing each bad connection by tool name. Deliberately does NOT check whether a node has ALL
+  the inputs it needs (MaxBin2 genuinely requires both a contigs edge AND a reads edge simultaneously -
+  `ch_contigs.join(ch_depleted_reads)` - a node fed only one would still fail for real) - a documented, known
+  gap, not an oversight; this pass only checks "is each individual drawn connection real," which is what was
+  asked for and what actually caught the mistakes in the owner's own graph. **Verified for real**: recreated
+  the exact QUAST → MaxBin2 connection from the owner's saved export live in-browser - the dashed-amber edge
+  and the warning banner ("1 connection doesn't match how the real pipeline works: QUAST → MaxBin2") both
+  appeared immediately on drawing it. Test suite grew from 31 to 38 (7 new tests covering real dependencies,
+  plausible-but-wrong ones, unknown-endpoint edges, and no-incoming-edge nodes).
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).

@@ -25,6 +25,9 @@
     "deleteConnection": "Supprimer la connexion",
     "undo": "Annuler",
     "redo": "Rétablir",
+    "invalidConnections_one": "{{count}} connexion ne correspond pas au fonctionnement réel du pipeline :",
+    "invalidConnections_other": "{{count}} connexions ne correspondent pas au fonctionnement réel du pipeline :",
+    "invalidConnectionsHint": "Le pipeline réel est une séquence fixe d'étapes, pas un graphe librement connectable - ces connexions ne fonctionneraient pas telles quelles.",
     "duplicate": "Dupliquer"
   },
   "history": {

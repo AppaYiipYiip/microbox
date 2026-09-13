@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, type Connection, type Edge } from '@xyflow/react'
 import { NodePalette } from '../components/NodePalette'
@@ -8,7 +8,13 @@ import type { ToolNodeType } from '../components/ToolNode'
 import { updateNodeParam as mergeNodeParam } from '../utils/updateNodeParam'
 import { nextNodeId } from '../utils/nodeId'
 import { EMPTY_HISTORY, pushSnapshot, undo as undoHistory, redo as redoHistory } from '../utils/history'
+import { findInvalidEdges } from '../utils/validatePipeline'
 import './ComposerPage.css'
+
+function toolName(t: (key: string) => string, toolId: string): string {
+  const tool = TOOL_CATALOG.find((tl) => tl.id === toolId)
+  return tool ? t(tool.nameKey) : toolId
+}
 
 // Downloads a JSON snapshot of the canvas (nodes: id/type/position/data -
 // data now includes each node's edited params - edges: source/target) via
@@ -46,6 +52,16 @@ function ComposerInner() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
   const selectedTool = selectedNode ? TOOL_CATALOG.find((tool) => tool.id === selectedNode.data.toolId) : null
+
+  // Flags connections that don't correspond to any real dependency in
+  // workflows/microbox.nf (owner feedback 2026-09-13, after asking about a
+  // saved canvas: "doesnt each node have a set of parametres..." led into
+  // "how would we store the result" and surfaced that the composer let you
+  // draw graphs the real fixed-backbone pipeline can't execute - e.g. QUAST
+  // -> MaxBin2, which isn't a real data dependency). Purely informational -
+  // does not block Save/Run (Run is already disabled for other reasons).
+  const invalidEdges = useMemo(() => findInvalidEdges(nodes, edges), [nodes, edges])
+  const invalidEdgeIds = useMemo(() => new Set(invalidEdges.map((e) => e.edgeId)), [invalidEdges])
 
   // Undo/redo (owner feedback 2026-09-13: "many quality of life elements").
   // A snapshot is the canvas state right BEFORE the mutation about to be
@@ -180,6 +196,21 @@ function ComposerInner() {
           </button>
         </div>
       </div>
+      {invalidEdges.length > 0 && (
+        <div className="composer-page__warning" role="status">
+          <p className="composer-page__warning-title">
+            {t('composer.invalidConnections', { count: invalidEdges.length })}
+          </p>
+          <ul className="composer-page__warning-list">
+            {invalidEdges.map((invalid) => (
+              <li key={invalid.edgeId}>
+                {toolName(t, invalid.sourceToolId)} → {toolName(t, invalid.targetToolId)}
+              </li>
+            ))}
+          </ul>
+          <p className="composer-page__warning-hint">{t('composer.invalidConnectionsHint')}</p>
+        </div>
+      )}
       <div className="composer-page__layout">
         <div className="composer-page__canvas-area">
           <PipelineCanvas
@@ -194,6 +225,7 @@ function ComposerInner() {
             onNodeDragStart={takeSnapshot}
             onSelectionDragStart={takeSnapshot}
             onBeforeAddNode={takeSnapshot}
+            invalidEdgeIds={invalidEdgeIds}
           />
           {selectedNode && selectedTool && (
             <aside className="composer-page__detail" aria-label={t('composer.nodeSelected')}>

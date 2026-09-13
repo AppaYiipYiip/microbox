@@ -19,6 +19,13 @@ edges shown dashed-amber plus a warning banner, non-blocking. Also confirmed the
 already faithfully mirrors the only real per-tool params (`host_fasta`/`kraken2_db`/`genomad_db`/
 `checkv_db` - all paths, verified against `nextflow.config` directly). See "Composer canvas: connections
 validated against the real pipeline's fixed backbone..." below.
+**Composer canvas: node state visibility + a real Save/Import round trip** — worked from PLAN.md §6.11's own
+still-open Must-haves (enabled/skipped and default-vs-overridden param visibility on the canvas; a portable,
+faithful pipeline-configuration file). Found and fixed a real Save fidelity bug along the way (width/height
+and edge handle info were silently dropped, which would have broken any re-import). Also logged Open #9: the
+composer's hardcoded connection rules have no automated cross-check against the real pipeline's actual
+wiring, a gap PLAN.md §6.10 explicitly flagged as still needed once the UI existed to test against. Test
+suite grew from 38 to 56. See "Composer canvas: node state visibility + Save/Import fidelity..." below.
 **Pavian added to the composer canvas's node palette** — the owner noticed it was missing from the composer
 even though it already existed as a standalone tool in the main pipeline; added to the "reporting" category
 alongside MultiQC, with an honest note that it's not a DAG step. See "Pavian added to the composer canvas's
@@ -46,6 +53,23 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
    delete, and Delete key + duplicate-node — all three built and verified same day (see "Composer UI QoL
    pass..." below). Snap-to-grid and a minimap were raised but not picked; reopen as a new item if the owner
    wants them later.
+9. **No test cross-checks the composer's hardcoded connection rules (`composer-ui/src/data/
+   pipelineTopology.ts`) against what `workflows/microbox.nf` actually does.** PLAN.md §6.10 decided to
+   hardcode the compatibility rules independently in the UI and the pipeline rather than share a schema
+   (simpler to build, avoids a cross-stack Groovy/JS metadata format for a bounded ~20-node toolbox), but
+   flagged explicitly that this leaves a structural drift risk: if `workflows/microbox.nf`'s real wiring ever
+   changes, `pipelineTopology.ts` could silently go stale, and nothing today would catch the UI showing a
+   connection as fine when the pipeline would actually reject it (or vice versa). §6.10's own words: "that
+   cross-checking test is the one piece this decision still requires... not built yet, noted here so it
+   isn't forgotten once the UI exists to test against." The UI now exists (2026-09-13). Deliberately not
+   attempted this round - a real automated cross-check would need something that can inspect
+   `workflows/microbox.nf`'s actual channel wiring (a Nextflow DSL2 parser, or at minimum carefully-targeted
+   assertions against specific known lines), which is a genuinely hard, easily-fragile problem on its own,
+   not a small addition; forcing a shallow version in now risked either false confidence (a brittle grep-
+   based check that looks like coverage but isn't) or a rabbit hole disproportionate to this round's other
+   work. `pipelineTopology.ts` itself already cites the specific `workflows/microbox.nf` behavior each entry
+   is grounded in (a manual cross-check performed once, at write time) - the gap is that nothing re-verifies
+   this automatically if the pipeline changes later.
 
 ---
 
@@ -494,5 +518,52 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   and the warning banner ("1 connection doesn't match how the real pipeline works: QUAST → MaxBin2") both
   appeared immediately on drawing it. Test suite grew from 31 to 38 (7 new tests covering real dependencies,
   plausible-but-wrong ones, unknown-endpoint edges, and no-incoming-edge nodes).
+
+- **Composer canvas: node state visibility + Save/Import fidelity, 2026-09-13** (owner: "go ahead and
+  continue building as per the plan. and test aswell. i ll be afk, take all the decisions yourself" —
+  worked from `docs/planning/PLAN.md` §6.11's own explicit, still-open Must-haves rather than guessing at
+  scope). Three pieces:
+  1. **Node state visible on the canvas, not just the detail panel** — §6.11: "node state
+     (enabled/skipped/incompatible-connection) needs to be visible, not just silently enforced," and "nodes
+     need a visual distinction between default and user-overridden parameters." Added an "Enabled" checkbox
+     per node (`src/utils/toggleNodeEnabled.ts`, unit-tested) - a disabled node renders dimmed with a
+     "Skipped" badge directly on `ToolNode.tsx`, independent of selection. Any tool with a real param set
+     away from empty shows a small amber dot next to its name. The hover tooltip now includes every
+     currently-set param's *current value*, not just the static description - §6.11 explicitly: "tooltips
+     should show current values, not defaults."
+  2. **A real Save/Import round trip, PLAN.md §6.11's single largest remaining open Must-have** ("save/
+     import/export a pipeline configuration as a portable file... reconstruct the pipeline exactly as if it
+     had been built there natively"). `src/utils/importCanvasSnapshot.ts` (pure, unit-tested) parses and
+     validates a saved JSON file and **rejects the whole thing** on any structural problem (invalid JSON,
+     wrong `formatVersion`, an unknown tool id, malformed node/edge shape) - §6.11: "a malformed or hostile
+     file shouldn't be trusted blindly." Every imported node gets a fresh id via the same counter the
+     palette-drop/duplicate paths already use (`src/utils/nodeId.ts`) rather than trusting the file's own
+     ids, which could otherwise collide with the current session's own counter; edges are rebuilt through
+     React Flow's own `addEdge()` utility (the same one `onConnect` uses), not a hand-rolled id scheme.
+     Import replaces the whole canvas (a deliberate "Load a file" action) but takes an undo-history snapshot
+     first, so one Ctrl+Z recovers the pre-import canvas - confirmed live. A translated, non-blocking error
+     banner reports why a bad file was rejected.
+  3. **A real fidelity bug found and fixed while building Import, not caught by testing Save in isolation**:
+     `downloadCanvasSnapshot` silently dropped `width`/`height` and each edge's `sourceHandle`/`targetHandle`
+     entirely. Since every `ToolNode` has 4 handles, an edge missing which one it used would have silently
+     rendered from whichever handle React Flow finds first on import - confirmed by reading
+     `@xyflow/system`'s own source (`getHandle$1`: `"if no handleId is given, we use the first handle"`),
+     not a crash, just a silently wrong-looking reconstruction of the connection actually drawn. This kind
+     of bug is structurally invisible until something tries to read the exported data back - exactly why it
+     surfaced now and not when Save was first built. Fixed by including both in the export.
+  **Verified for real in-browser, not just unit-tested**: dropped a Kraken2 node, set its `kraken2_db` param,
+  toggled it disabled, confirmed the dimmed+badge+dot rendering; exported a real 2-node/1-edge canvas,
+  re-imported it via a genuine `File`+`DataTransfer` dispatched to the actual file input (not simulated -
+  browser automation can't drive an OS file picker directly either way, so this is the equivalent real
+  browser-API call scripted instead of clicked), and confirmed position/size/params/enabled state/edge
+  handles all round-tripped exactly; confirmed a deliberately malformed file is rejected with a clear message
+  and leaves the canvas untouched; confirmed Ctrl+Z after a successful import restores the pre-import canvas.
+  **Also found while implementing**: `npx tsc --noEmit` (used throughout this session as the quick typecheck)
+  missed a real type error that only `npm run build`'s `tsc -b` (the project-reference build, presumably
+  resolving a different/stricter tsconfig) caught - `Object.fromEntries` losing type narrowing through a
+  `.filter()` callback without an explicit type-predicate signature. Worth remembering: `tsc --noEmit` alone
+  is not sufficient verification for this project going forward, only a real `npm run build`. Test suite grew
+  from 38 to 56 (18 new tests: `toggleNodeEnabled.test.ts`, `importCanvasSnapshot.test.ts`, and 4 new
+  `ToolNode.test.tsx` cases for the disabled/override-dot rendering).
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).

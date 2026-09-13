@@ -28,7 +28,18 @@
     "duplicate": "Duplicate",
     "invalidConnections_one": "{{count}} connection doesn't match how the real pipeline works:",
     "invalidConnections_other": "{{count}} connections don't match how the real pipeline works:",
-    "invalidConnectionsHint": "The real pipeline is a fixed sequence of stages, not a freely connectable graph - these wouldn't run as drawn."
+    "invalidConnectionsHint": "The real pipeline is a fixed sequence of stages, not a freely connectable graph - these wouldn't run as drawn.",
+    "enabled": "Enabled",
+    "skippedBadge": "Skipped",
+    "skippedTooltip": "Skipped - this stage will not run.",
+    "import": "Import",
+    "importHint": "Loads a previously saved pipeline JSON file, replacing the current canvas.",
+    "importError": {
+      "invalid-json": "That file isn't valid JSON and couldn't be read.",
+      "malformed": "That file isn't a valid pipeline snapshot (missing or malformed fields).",
+      "unsupported-version": "That file was saved in a format this version of the composer doesn't understand.",
+      "unknown-tool": "That file references a tool that doesn't exist in this pipeline's catalog."
+    }
   },
   "history": {
     "title": "Run History",

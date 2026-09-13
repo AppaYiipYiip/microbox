@@ -28,7 +28,18 @@
     "invalidConnections_one": "{{count}} connexion ne correspond pas au fonctionnement réel du pipeline :",
     "invalidConnections_other": "{{count}} connexions ne correspondent pas au fonctionnement réel du pipeline :",
     "invalidConnectionsHint": "Le pipeline réel est une séquence fixe d'étapes, pas un graphe librement connectable - ces connexions ne fonctionneraient pas telles quelles.",
-    "duplicate": "Dupliquer"
+    "duplicate": "Dupliquer",
+    "enabled": "Activé",
+    "skippedBadge": "Ignoré",
+    "skippedTooltip": "Ignoré - cette étape ne sera pas exécutée.",
+    "import": "Importer",
+    "importHint": "Charge un fichier JSON de pipeline précédemment enregistré, en remplaçant la zone de travail actuelle.",
+    "importError": {
+      "invalid-json": "Ce fichier n'est pas un JSON valide et n'a pas pu être lu.",
+      "malformed": "Ce fichier n'est pas un instantané de pipeline valide (champs manquants ou incorrects).",
+      "unsupported-version": "Ce fichier a été enregistré dans un format que cette version du compositeur ne reconnaît pas.",
+      "unknown-tool": "Ce fichier fait référence à un outil qui n'existe pas dans le catalogue de ce pipeline."
+    }
   },
   "history": {
     "title": "Historique des analyses",

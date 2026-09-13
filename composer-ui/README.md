@@ -96,12 +96,42 @@ actually clicking through it, not from re-reading the requirements:
   checks "is each individual drawn connection real," which is what was asked for and what caught the actual
   mistake in a real user-drawn graph. Verified live in-browser: recreating the user's own QUAST → MaxBin2
   connection renders the dashed-amber edge and the exact warning text, in real time as the edge is drawn.
-- **Save and Run buttons** on the Composer toolbar. Save genuinely works client-side today — downloads a
-  JSON snapshot of the canvas (node ids/types/positions/data including params, edge connections) via a
-  `Blob` + `<a download>`. This is a real step toward §6.11's full export/import fidelity requirement, not
-  the finished feature (still no import path, no schema migration story). Run is visible but genuinely
-  disabled, with a tooltip explaining why - there's no backend to run anything against yet; a disabled
-  button with an honest reason beats a missing one.
+- **Node state is visible on the canvas, not just in the detail panel** (PLAN.md §6.11's Pipeline-page
+  refinement: "node state (enabled/skipped/incompatible-connection) needs to be visible, not just silently
+  enforced," and "nodes need a visual distinction between default and user-overridden parameters"). Every
+  node has an "Enabled" checkbox in its detail panel (`src/utils/toggleNodeEnabled.ts`, unit-tested); a
+  disabled node renders dimmed with a "Skipped" badge directly on the canvas, regardless of selection. Any
+  tool with at least one real param set away from empty shows a small amber dot next to its name. The hover
+  tooltip shows the tool's description plus every currently-set param's *current value* (not the default) —
+  §6.11 explicitly calls out "tooltips should show current values, not defaults." Verified live in-browser
+  and via `ToolNode.test.tsx` (rendered through a real `ReactFlow` instance, same pattern as the 4-handle
+  test).
+- **Save and Import, with real fidelity** (PLAN.md §6.11: "save/import/export a pipeline configuration as a
+  portable file... importing it into a different microbox instance should reconstruct the pipeline exactly
+  as if it had been built there natively"). Save downloads a JSON snapshot via a `Blob` + `<a download>`;
+  Import (a hidden `<input type="file">` behind a visible toolbar button) reads it back and replaces the
+  canvas. **A real fidelity bug found and fixed while building this**: Save previously dropped `width`/
+  `height` and each edge's `sourceHandle`/`targetHandle` entirely — since every `ToolNode` has 4 handles, an
+  edge missing that information would have silently rendered from whichever handle React Flow finds first
+  (confirmed by reading `@xyflow/system`'s own `getHandle$1`: `"if no handleId is given, we use the first
+  handle"`), not the one actually drawn. Both are now saved and restored. `src/utils/
+  importCanvasSnapshot.ts` (pure, unit-tested, no FileReader/DOM) validates the file and **rejects the whole
+  import** on any structural problem (invalid JSON, wrong `formatVersion`, a referenced tool id that doesn't
+  exist in the catalog, malformed node/edge shape) rather than partially loading a broken graph — PLAN.md
+  §6.11: "basic sanity validation on import (a malformed or hostile file shouldn't be trusted blindly)."
+  Every imported node gets a **fresh id** via the same counter the palette-drop/duplicate paths use, never
+  the file's own ids verbatim, so importing can never collide with nodes already on the canvas; edges are
+  rebuilt through React Flow's own `addEdge()` utility (the same one `onConnect` uses) so the id/shape stays
+  identical to a freshly-drawn connection. Import is a real, deliberate "Load a file" action (destructive to
+  whatever's currently on the canvas), so it takes an undo-history snapshot first — confirmed live: importing
+  over an existing canvas, then pressing Ctrl+Z, restored the pre-import canvas exactly. A translated,
+  non-blocking error banner reports why a bad file was rejected. **Verified live in-browser**: exported a
+  real 2-node, 1-edge canvas (a disabled Kraken2 with a set param, connected to Bracken), re-imported it via
+  a real `File`/`DataTransfer` dispatched to the actual file input, and confirmed every field round-tripped
+  exactly (position, size, enabled state, param value, and which specific handles the edge used) — plus
+  confirmed a deliberately malformed file is rejected with a clear message and leaves the canvas untouched.
+- **Save/Run buttons** — Run is visible but genuinely disabled, with a tooltip explaining why - there's no
+  backend to run anything against yet; a disabled button with an honest reason beats a missing one.
 - Live French/English switching (`src/i18n/`, react-i18next) — every piece of UI chrome, every node
   label/description, and now the Save/Run button labels are translated, verified live to actually re-render
   when the toggle is clicked, including already-placed canvas nodes.
@@ -127,18 +157,28 @@ actually clicking through it, not from re-reading the requirements:
   select both nodes, a drag of one multi-selected node confirmed to move the whole selection together, and
   Delete confirmed to remove an entire multi-selection as a single undo step. Recreating the user's own
   reported QUAST → MaxBin2 connection confirmed the dashed-amber edge and warning banner both appear, live.
-- `npm test` (Vitest + React Testing Library, 38 tests) — i18n key-structure parity between `en.json`/
+  A disabled node with a set param confirmed to render dimmed with a "Skipped" badge and an override dot; a
+  real Save→Import round trip (via a real `File`/`DataTransfer` dispatched to the actual file input, not
+  simulated) confirmed every field survives exactly, and a deliberately malformed import confirmed to show a
+  clear error and leave the canvas untouched; Undo confirmed to recover the pre-import canvas.
+- `npm test` (Vitest + React Testing Library, 56 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
   handles with the correct fixed target/source roles, self-connection rejected by `isValidConnection`, the
-  param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings, and
-  the undo/redo stack (`src/utils/history.ts`) round-trips correctly, discards redo on a new change, and caps
-  its length, and `findInvalidEdges` (`src/utils/validatePipeline.ts`) accepts real dependencies, flags
+  param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings, the
+  undo/redo stack (`src/utils/history.ts`) round-trips correctly, discards redo on a new change, and caps its
+  length, `findInvalidEdges` (`src/utils/validatePipeline.ts`) accepts real dependencies and flags
   connections that don't exist in the real pipeline (including two that look plausible but aren't - MEGAHIT
-  → Kraken2, metaSPAdes → MultiQC), and ignores edges with no incoming node.
-- `npm run build` — a real production build succeeds.
-- `npx tsc --noEmit` and `npm run lint` (oxlint) both clean.
+  → Kraken2, metaSPAdes → MultiQC), `toggleNodeEnabled` flips only the targeted node, `ToolNode` renders the
+  disabled/override-dot states correctly, and `parseCanvasSnapshot` (`src/utils/importCanvasSnapshot.ts`)
+  round-trips a full snapshot, remaps ids, defaults missing fields sensibly, and rejects invalid JSON, the
+  wrong format version, an unknown tool id, and structurally malformed nodes/edges.
+- `npm run build` — a real production build succeeds. **Note**: `npx tsc --noEmit` alone is not sufficient -
+  it missed a real type error (`Object.fromEntries` losing type narrowing through a `.filter()`) that only
+  `npm run build`'s `tsc -b` (project-reference build) caught, presumably a difference in which tsconfig each
+  resolves. Always verify with a real `npm run build`, not just `tsc --noEmit`, going forward.
+- `npm run lint` (oxlint) clean.
 
 **Real bug hit and fixed while doing this pass**: after bulk-syncing changed files between the Windows and
 WSL copies (this project's established dual-copy workflow, `CONTRIBUTING.md` §0), Vite's dev server threw a
@@ -166,8 +206,13 @@ there later; not yet included since this is still a prototype, not part of the s
   connection, no way to actually execute what's built on the canvas. The Run button reflects this honestly
   (visible, disabled, with a tooltip) rather than pretending to work. That's real, separate, unbuilt scope
   (`docs/planning/PLAN.md` §6.12).
-- **Save is a partial step, not §6.11's full requirement.** It downloads node/edge structure, positions, and
-  per-node params, but there's no matching Import/load path at all, and no schema-version migration story.
+- **Save/Import now cover §6.11's core fidelity requirement (position, size, params, enabled state, edge
+  handles, real id-collision safety) but not everything the section describes.** No schema-version migration
+  story (a v2 format would just be rejected outright by v1's parser, not translated forward); no name/
+  description metadata on a saved pipeline; positions are saved as raw canvas coordinates, not the
+  logical/viewport-independent scheme §6.11 flags as the standard fix for cross-screen-size portability
+  (not yet a problem in practice since React Flow's canvas is itself pannable/zoomable and nothing here
+  depends on absolute screen pixels, but worth revisiting if that ever changes).
 - **Validation is a warning, not enforcement** — any node can still be connected to any other node on the
   canvas; invalid connections (per `src/data/pipelineTopology.ts`) get a dashed-amber edge and a banner
   entry, but nothing blocks drawing or saving them. §6.10's confirmed requirement (the Bracken/contigs-report
@@ -202,6 +247,13 @@ Both are covered the same way this codebase already covers drag-and-drop (`NodeP
 a directly-testable function (`src/utils/isValidConnection.ts`, `src/utils/updateNodeParam.ts`), unit-test
 that, and verify the actual pointer interaction live in a real browser instead of faking it in jsdom.
 
+Same split applied to Import: `src/utils/importCanvasSnapshot.ts` (the parsing/validation) is fully
+unit-tested with plain strings, no FileReader or DOM at all; the actual `<input type="file">`/FileReader
+wiring in `ComposerPage.tsx` was verified live in a real browser instead, by constructing a real `File` +
+`DataTransfer` and dispatching a genuine `change` event to the input - not simulated, a real browser File
+API call, just scripted instead of clicked through an OS file picker (which browser automation can't drive
+directly either way).
+
 ## Bugs found and fixed this pass (2026-09-13), from real owner testing
 
 - **Connection-point colors intermittently reverted to the library's default grey.** Root cause: React
@@ -217,6 +269,12 @@ that, and verify the actual pointer interaction live in a real browser instead o
   instead of growing the box.
 - **No way to resize a node** — added via React Flow's own `NodeResizer` component, shown only while a node
   is selected.
+- **Save silently dropped `width`/`height` and each edge's `sourceHandle`/`targetHandle`** — found while
+  building Import, not by testing Save in isolation (Save alone can't reveal a fidelity gap; only trying to
+  reconstruct FROM the saved data can). Since every `ToolNode` has 4 handles, an edge missing which one it
+  used would have rendered from whichever handle React Flow finds first on import (confirmed by reading
+  `@xyflow/system`'s own source: `getHandle$1`, `"if no handleId is given, we use the first handle"`) — not
+  a crash, just a silently wrong-looking reconstruction. Fixed by including both in `downloadCanvasSnapshot`.
 
 None of this is an oversight - PLAN.md §6.16 scoped this pass as "requirements + a working prototype of the
 UI shell," not a full build. See `docs/KNOWN_ISSUES.md` for the dated entry with full context.

@@ -79,6 +79,15 @@
   font-size: 0.75rem;
 }
 
+.composer-page__warning--error {
+  border-color: #b34747;
+  background: #b347471a;
+}
+
+.composer-page__warning--error .composer-page__warning-title {
+  color: #ff8a8a;
+}
+
 .composer-page__layout {
   display: flex;
   flex: 1;
@@ -163,4 +172,14 @@
   margin-top: 0.75rem;
   font-size: 0.75rem;
   color: #777;
+}
+
+.composer-page__enabled-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #ccc;
+  cursor: pointer;
 }

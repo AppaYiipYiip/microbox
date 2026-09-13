@@ -19,22 +19,13 @@ import { DRAG_DATA_FORMAT } from './NodePalette'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import { isValidConnection } from '../utils/isValidConnection'
 import { nextNodeId } from '../utils/nodeId'
+import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../data/nodeDefaults'
 import './PipelineCanvas.css'
 
 // Accepts both keys so Delete works on Windows and Backspace works on macOS
 // (React Flow's own default is 'Backspace' only) - owner feedback 2026-09-13
 // asked for a "delete key" without specifying which.
 const DELETE_KEY_CODE = ['Backspace', 'Delete']
-
-// All nodes start at this same size regardless of tool name/category length
-// (owner feedback 2026-09-13: "the nodes should all have the same size by
-// default no matter their content"). ToolNode.tsx truncates overflowing text
-// with an ellipsis rather than growing the box. The user can resize from
-// here via the NodeResizer handles ToolNode renders when selected; React
-// Flow persists the result back onto node.width/node.height through the
-// normal onNodesChange stream, same as position drags.
-export const DEFAULT_NODE_WIDTH = 180
-export const DEFAULT_NODE_HEIGHT = 68
 
 // Module-level, not recreated per render - React Flow's own guidance for
 // nodeTypes/edgeTypes objects (a new object identity every render forces it

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, type Connection, type Edge } from '@xyflow/react'
 import { NodePalette } from '../components/NodePalette'
@@ -6,9 +6,11 @@ import { PipelineCanvas } from '../components/PipelineCanvas'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import type { ToolNodeType } from '../components/ToolNode'
 import { updateNodeParam as mergeNodeParam } from '../utils/updateNodeParam'
+import { toggleNodeEnabled as toggleNodeEnabledInList } from '../utils/toggleNodeEnabled'
 import { nextNodeId } from '../utils/nodeId'
 import { EMPTY_HISTORY, pushSnapshot, undo as undoHistory, redo as redoHistory } from '../utils/history'
 import { findInvalidEdges } from '../utils/validatePipeline'
+import { parseCanvasSnapshot, type ImportError } from '../utils/importCanvasSnapshot'
 import './ComposerPage.css'
 
 function toolName(t: (key: string) => string, toolId: string): string {
@@ -16,20 +18,23 @@ function toolName(t: (key: string) => string, toolId: string): string {
   return tool ? t(tool.nameKey) : toolId
 }
 
-// Downloads a JSON snapshot of the canvas (nodes: id/type/position/data -
-// data now includes each node's edited params - edges: source/target) via
-// a Blob + temporary <a download> - genuinely works client-side, no
-// backend needed for this much. NOT the full §6.11 export-fidelity
-// requirement (no import path, no schema-version migration story) - a
-// real first step, not the finished feature. Named for a human reading
-// the download, not a hash, so it's obviously "a microbox pipeline" in a
-// Downloads folder.
+// Downloads a JSON snapshot of the canvas via a Blob + temporary <a
+// download> - genuinely works client-side, no backend needed for this much.
+// Real fidelity requirement (PLAN.md §6.11): a re-imported file must
+// reconstruct the canvas exactly, so this includes everything
+// importCanvasSnapshot.ts needs to do that - width/height (so a resized node
+// comes back the size it was left at, not the default), sourceHandle/
+// targetHandle (which of a node's 4 handles a connection actually used -
+// omitting these would make every re-imported edge silently snap to
+// whichever handle React Flow picks first, not the one originally drawn),
+// and enabled (skip state). Named for a human reading the download, not a
+// hash, so it's obviously "a microbox pipeline" in a Downloads folder.
 function downloadCanvasSnapshot(nodes: ToolNodeType[], edges: Edge[]) {
   const snapshot = {
     formatVersion: 1,
     savedAt: new Date().toISOString(),
-    nodes: nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
-    edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    nodes: nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, width: n.width, height: n.height, data: n.data })),
+    edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle })),
   }
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -146,6 +151,19 @@ function ComposerInner() {
     [setNodes],
   )
 
+  // Enabled/skipped state (PLAN.md §6.11: node state "needs to be visible,
+  // not just silently enforced") - toggled from the detail panel; the
+  // resulting dimmed styling + badge render directly on the canvas node
+  // itself regardless of selection (ToolNode.tsx), so it's visible without
+  // needing to click back into the panel.
+  const toggleNodeEnabled = useCallback(
+    (nodeId: string) => {
+      takeSnapshot()
+      setNodes((nds) => toggleNodeEnabledInList(nds, nodeId))
+    },
+    [takeSnapshot, setNodes],
+  )
+
   // Duplicates the selected node's tool + params (not its connections - a
   // copy that inherited its source's edges would silently create a second
   // pipeline branch the user didn't ask for). Offset so the copy doesn't
@@ -167,6 +185,50 @@ function ComposerInner() {
     [nodes, takeSnapshot, setNodes],
   )
 
+  // Import (PLAN.md §6.11: "save/import/export a pipeline configuration as a
+  // portable file"). A hidden <input type="file"> triggered by the visible
+  // toolbar button - the standard way to get a real file picker without
+  // reimplementing browser chrome. Parsing/validation lives in
+  // importCanvasSnapshot.ts (pure, unit-tested); this handler is just the
+  // FileReader/DOM plumbing around it, verified live in-browser instead
+  // (same split as every other browser-only interaction this project can't
+  // faithfully simulate in jsdom).
+  const [importError, setImportError] = useState<ImportError | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImportClick = useCallback(() => fileInputRef.current?.click(), [])
+
+  const handleImportFile = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = '' // allow re-importing the same filename consecutively
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = parseCanvasSnapshot(String(reader.result))
+        if (!result.ok) {
+          setImportError(result.error)
+          return
+        }
+        setImportError(null)
+        // Replacing the whole canvas is a real, deliberate "Load a file"
+        // action (the user just picked one on purpose) - but it's still a
+        // destructive overwrite of whatever was on the canvas before, so it
+        // gets a history snapshot first like every other mutation here: one
+        // Ctrl+Z instantly recovers the pre-import canvas if this wasn't
+        // what they meant to do.
+        takeSnapshot()
+        setNodes(result.nodes)
+        setEdges(result.edges)
+        setSelectedNodeId(null)
+      }
+      reader.onerror = () => setImportError('invalid-json')
+      reader.readAsText(file)
+    },
+    [takeSnapshot, setNodes, setEdges],
+  )
+
   return (
     <div className="composer-page">
       <div className="composer-page__toolbar">
@@ -186,6 +248,10 @@ function ComposerInner() {
           >
             {t('composer.save')}
           </button>
+          <button type="button" className="composer-page__btn" title={t('composer.importHint')} onClick={handleImportClick}>
+            {t('composer.import')}
+          </button>
+          <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={handleImportFile} style={{ display: 'none' }} />
           <button
             type="button"
             className="composer-page__btn composer-page__btn--primary"
@@ -196,6 +262,11 @@ function ComposerInner() {
           </button>
         </div>
       </div>
+      {importError && (
+        <div className="composer-page__warning composer-page__warning--error" role="alert">
+          <p className="composer-page__warning-title">{t(`composer.importError.${importError}`)}</p>
+        </div>
+      )}
       {invalidEdges.length > 0 && (
         <div className="composer-page__warning" role="status">
           <p className="composer-page__warning-title">
@@ -239,6 +310,14 @@ function ComposerInner() {
               </div>
               <h3>{t(selectedTool.nameKey)}</h3>
               <p>{t(selectedTool.descriptionKey)}</p>
+              <label className="composer-page__enabled-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedNode.data.enabled !== false}
+                  onChange={() => toggleNodeEnabled(selectedNode.id)}
+                />
+                {t('composer.enabled')}
+              </label>
               {selectedTool.params && selectedTool.params.length > 0 ? (
                 <form className="composer-page__params" onSubmit={(e) => e.preventDefault()}>
                   {selectedTool.params.map((param) => (

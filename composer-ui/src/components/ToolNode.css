@@ -4,6 +4,7 @@
    truncated with an ellipsis (below) instead of growing the box; resizing
    past that is available via the NodeResizer handles shown on selection. */
 .tool-node {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -22,6 +23,45 @@
 .tool-node--selected {
   border-color: #3a6cf4;
   box-shadow: 0 0 0 2px rgba(58, 108, 244, 0.4);
+}
+
+/* Node state must be visible on the canvas itself, not just in the detail
+   panel (PLAN.md §6.11: "enabled/skipped ... needs to be visible, not just
+   silently enforced") - dimmed + a small badge, toggled from the detail
+   panel (ComposerPage.tsx). */
+.tool-node--disabled {
+  opacity: 0.45;
+}
+
+.tool-node__skipped-badge {
+  position: absolute;
+  top: -0.6rem;
+  left: 0.5rem;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #bbb;
+}
+
+/* A small dot next to the node name when at least one real param has been
+   set away from its default (empty) value - PLAN.md §6.11: nodes need "a
+   visual distinction between default and user-overridden parameters." The
+   node itself only shows THAT something is overridden; the actual current
+   value is in the hover tooltip and the detail panel, not repeated here -
+   node text is already truncated for space (see the fixed-size comment
+   above). */
+.tool-node__param-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background: #f0b429;
+  vertical-align: middle;
 }
 
 .tool-node__category {

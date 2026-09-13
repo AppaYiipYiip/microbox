@@ -1,0 +1,75 @@
+{
+  "name": "microbox",
+  "homePage": "https://github.com/AppaYiipYiip/microbox",
+  "repos": {
+    "https://github.com/nf-core/modules.git": {
+      "modules": {
+        "nf-core": {
+          "bowtie2/align": {
+            "branch": "master",
+            "git_sha": "2080397432fcb0d079121dbacf22ce42ef175cec",
+            "installed_by": ["modules"]
+          },
+          "bowtie2/build": {
+            "branch": "master",
+            "git_sha": "a0961c41021561ac7cf139f86bd7812a2f99e994",
+            "installed_by": ["modules"]
+          },
+          "bracken/bracken": {
+            "branch": "master",
+            "git_sha": "6d46786420b4d7bc88eba026eb389c0c5535d120",
+            "installed_by": ["modules"]
+          },
+          "checkv/endtoend": {
+            "branch": "master",
+            "git_sha": "6d46786420b4d7bc88eba026eb389c0c5535d120",
+            "installed_by": ["modules"]
+          },
+          "fastp": {
+            "branch": "master",
+            "git_sha": "826a9b28d6da61097d60e1923bb8a2e51de3c5b4",
+            "installed_by": ["modules"]
+          },
+          "fastqc": {
+            "branch": "master",
+            "git_sha": "6d46786420b4d7bc88eba026eb389c0c5535d120",
+            "installed_by": ["modules"]
+          },
+          "genomad/endtoend": {
+            "branch": "master",
+            "git_sha": "781f2625386fe0bf2f337c7b99f56e618c59fc99",
+            "installed_by": ["modules"]
+          },
+          "kraken2/kraken2": {
+            "branch": "master",
+            "git_sha": "d67d33d5925fcec4691b499670fa2bd926fd2be5",
+            "installed_by": ["modules"]
+          },
+          "megahit": {
+            "branch": "master",
+            "git_sha": "6d46786420b4d7bc88eba026eb389c0c5535d120",
+            "installed_by": ["modules"]
+          },
+          "multiqc": {
+            "branch": "master",
+            "git_sha": "98403d15b0e50edae1f3fec5eae5e24982f1fade",
+            "installed_by": ["modules"]
+          },
+          "quast": {
+            "branch": "master",
+            "git_sha": "9a034dd2c5df2c9b283e09ddf2667d9118b4ccd7",
+            "installed_by": ["modules"]
+          },
+          "spades": {
+            "branch": "master",
+            "git_sha": "6d46786420b4d7bc88eba026eb389c0c5535d120",
+            "installed_by": ["modules"]
+          }
+        }
+      },
+      "subworkflows": {
+        "nf-core": {}
+      }
+    }
+  }
+}

@@ -184,6 +184,10 @@ actually clicking through it, not from re-reading the requirements:
   checks "is each individual drawn connection real," which is what was asked for and what caught the actual
   mistake in a real user-drawn graph. Verified live in-browser: recreating the user's own QUAST → MaxBin2
   connection renders the dashed-amber edge and the exact warning text, in real time as the edge is drawn.
+  **Updated 2026-09-13** once `workflows/microbox.nf` genuinely grew a new branch to match: fastp/FastQC ->
+  Kraken2 is now valid too (a real, independent pre-depletion classification pass, `params.
+  skip_kraken2_predepletion` - see `docs/KNOWN_ISSUES.md`'s dated entry), alongside the pre-existing
+  Bowtie2 -> Kraken2.
 - **Node state is visible on the canvas, not just in the detail panel** (PLAN.md §6.11's Pipeline-page
   refinement: "node state (enabled/skipped/incompatible-connection) needs to be visible, not just silently
   enforced," and "nodes need a visual distinction between default and user-overridden parameters"). Every

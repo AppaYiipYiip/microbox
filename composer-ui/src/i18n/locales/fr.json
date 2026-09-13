@@ -59,10 +59,21 @@
   "history": {
     "title": "Historique des analyses",
     "refresh": "Actualiser",
-    "checking": "Recherche d'un rapport...",
-    "placeholder": "Aucune analyse n'est encore terminée. Une fois une analyse terminée depuis la page Lancer le pipeline, son rapport apparaîtra ici automatiquement.",
+    "checking": "Chargement des analyses...",
+    "loadError": "Impossible de charger la liste des analyses. Essayez Actualiser.",
+    "placeholder": "Aucune analyse n'est encore terminée. Une fois une analyse terminée depuis la page Lancer le pipeline, elle apparaîtra ici automatiquement.",
     "generatedAt": "Rapport généré le {{date}}",
-    "reportTitle": "Rapport du pipeline"
+    "reportTitle": "Rapport du pipeline",
+    "backToList": "← Retour à la liste",
+    "columnDate": "Date",
+    "columnStatus": "Statut",
+    "columnActions": "Actions",
+    "statusReady": "Rapport prêt",
+    "statusNoReport": "Pas de rapport (l'analyse a peut-être échoué)",
+    "view": "Voir",
+    "export": "Exporter",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer cette analyse ({{id}}) et tous ses résultats ? Cette action est irréversible."
   },
   "categories": {
     "qc": "Contrôle qualité et découpage des lectures",

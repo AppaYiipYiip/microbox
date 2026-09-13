@@ -59,10 +59,21 @@
   "history": {
     "title": "Run History",
     "refresh": "Refresh",
-    "checking": "Checking for a report...",
-    "placeholder": "No run has completed yet. Once a run finishes on the Run Pipeline page, its report will show up here automatically.",
+    "checking": "Loading runs...",
+    "loadError": "Couldn't load the run list. Try Refresh.",
+    "placeholder": "No run has completed yet. Once a run finishes on the Run Pipeline page, it will show up here automatically.",
     "generatedAt": "Report generated {{date}}",
-    "reportTitle": "Pipeline report"
+    "reportTitle": "Pipeline report",
+    "backToList": "← Back to list",
+    "columnDate": "Date",
+    "columnStatus": "Status",
+    "columnActions": "Actions",
+    "statusReady": "Report ready",
+    "statusNoReport": "No report (run may have failed)",
+    "view": "View",
+    "export": "Export",
+    "delete": "Delete",
+    "confirmDelete": "Delete this run ({{id}}) and all of its results? This can't be undone."
   },
   "categories": {
     "qc": "Read QC & Trimming",

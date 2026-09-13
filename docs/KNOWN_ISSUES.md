@@ -4,7 +4,13 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**Run History is now a real page (the MultiQC report embedded, no WSL path ever
+Last updated: 2026-09-13 (**Run History is now a real list of every retained run - view/export/delete each
+one** - each run launched from the Run Pipeline page gets its own timestamped `results/run_<timestamp>/`
+output directory now (`bin/run.sh`'s new `--outdir` flag, `ui/app.py`), instead of every run overwriting the
+same report; a new `/reports-api/runs` list/delete endpoint (`serve-results-plugin.ts`) backs a real table in
+`HistoryPage.tsx`. Also removed the `test_aws` environment (production is one Windows EC2 VM, not a separate
+AWS tier). Test suite: 90 → 94. See "Run History became a real list of every retained run..." below.
+**Run History is now a real page (the MultiQC report embedded, no WSL path ever
 shown) and the Run Pipeline page's wasted-space layout/leaked technical detail fixed** - `ui/app.py` now uses
 `layout="wide"` and hides raw process ids/paths behind a "Technical details" expander; a new dev-server-only
 Vite plugin (`serve-results-plugin.ts`) serves the real pipeline's `results/` directory as same-origin URLs
@@ -105,7 +111,7 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
 
 1. ~~Git push blocked~~ **Resolved as "working as intended" (owner, 2026-09-11): this is a shared laptop, and the owner explicitly does NOT want credentials cached.** `~/.gitconfig`'s `credential.helper=` (empty) disables Git Credential Manager caching — that's not a bug to fix, it's exactly the right setting for a shared machine. Push/pull by running `git push`/`git pull` (must be run by a human, not Claude — interactive sign-in and global git config changes are both off-limits by policy) — git will prompt fresh each time for a GitHub username + a Personal Access Token (not the real password; GitHub Settings → Developer settings → Personal access tokens), and nothing gets stored. Repeat the prompt every push/pull, by design.
 2. ~~`modules.json` doesn't exist~~ **Resolved 2026-09-11 (owner: "work through all the bugs in known issues... do not cut any corners").** Retried from inside WSL2 exactly as this entry's own "next step" suggested - the Windows-path bug didn't apply there, confirming the original diagnosis. Real friction along the way, not a clean one-liner: (a) `nf-core modules install` needs a real terminal (`questionary`-based prompts don't respond to piped stdin; a real pty via `script -qc '...' /dev/null` was needed), (b) it needs `repository_type: pipeline` declared in a new `.nf-core.yml` (this repo never had one, since it wasn't scaffolded via `nf-core pipelines create`), (c) it shells out to `nextflow config` internally, so it hit the *exact* "java not on PATH in a non-interactive shell" issue from Fixed #17/#18 - fixed the same way, source SDKMAN first. `modules.json` now exists and correctly reconciled all 9 already-installed nf-core modules with their real upstream git SHAs (not just the one module explicitly requested) - `nf-core lint`/`nf-core modules update` can now recognize them. Verified the reinstall changed nothing: `git diff` on `modules/nf-core/fastp/` after a `--force` reinstall was empty, confirming the hand-fetched copy already matched upstream exactly. Real side effects this surfaced, fixed in the same pass (see Fixed #20 below): the `nf-core` tools venv had been created *inside* the repo, where nf-test's test-discovery doesn't respect `testsDir` and picked up the venv's own bundled example tests as if they belonged to this pipeline.
-3. **Only `test` and `docker` Nextflow profiles exist.** `bin/run.sh --profile dev` (or `test_aws`/`prod`) will currently fail — those profile blocks plus `conf/dev.config`/`conf/test_aws.config`/`conf/prod.config` don't exist yet. This is expected (planned for later milestones per `docs/planning/PLAN.md` §2.3/§6.3, not an M1 requirement) — noted here so it isn't mistaken for a new bug.
+3. **Only `test` and `docker` Nextflow profiles exist.** `bin/run.sh --profile dev` (or `prod`) will currently fail — those profile blocks plus `conf/dev.config`/`conf/prod.config` don't exist yet. This is expected (planned for later milestones per `docs/planning/PLAN.md` §2.3/§6.3, not an M1 requirement) — noted here so it isn't mistaken for a new bug. (No separate `test_aws` tier - removed from the environment list entirely 2026-09-13, owner: "its going to be just a windows running in ec2... there should be just dev and prod" - production is one normal Windows EC2 VM, PLAN.md §7, not a distinct AWS-only environment.)
 4. ~~Streamlit UI's Run button was only smoke-tested, not click-tested~~ **Resolved 2026-09-11 (owner: "streamlit it is").** Actually click-tested end to end via real browser automation (upload → select environment → Run → watch status → embedded MultiQC report), not just confirming the process responds on port 8501. It could not run the pipeline at all on the first attempt - see Fixed #18/#19 below for the two real bugs this surfaced and fixed. After both fixes, the full flow works: report embeds live in the page, including the new Software Versions table (Fixed #16) rendering correctly inside it.
 5. **Docker Desktop WSL Integration is per-machine, manual, GUI-only.** `bin/setup-dev.sh` automates everything scriptable, but on each new laptop someone still has to open Docker Desktop → Settings → Resources → WSL Integration → enable it for the distro. No way around this — it's not exposed via CLI.
 6. **Two files are locked immutable (`chattr +i`)** on this machine's WSL2 distro: `/etc/resolv.conf` and `~/.docker/config.json` (see Fixed #2 and #4). If either genuinely needs to change later (different DNS server, a real Docker Hub login), remember to `sudo chattr -i <file>` first or the edit will silently fail.
@@ -1032,3 +1038,52 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   tests - empty state, found state with timestamp, Refresh re-fetches, fetch failure falls back to the empty
   state honestly) plus `ui/test_app.py`'s updated assertion. Test suite: 86 → 90 (composer-ui) + 8 (unchanged,
   `ui/test_app.py`).
+
+- **Run History became a real list of every retained run (view/export/delete each one), 2026-09-13** (owner,
+  after seeing the single-report version just shipped: "isnt the run history a bit too crowded ?" and "i had
+  an image in mind where we see all previous run, we can delete some, export some and vew what we select").
+  The single-report version from the entry above was a real step but structurally couldn't do this: every
+  run overwrote the exact same `results/multiqc/multiqc_report.html`, so only ever one report existed on disk
+  at a time - there was no "history" to browse, only "the latest."
+  **Real fix, not just a UI change**: each run launched from the Run Pipeline page now gets its own
+  timestamped output directory, `results/run_<timestamp>/` (`ui/app.py` generates it and passes
+  `bin/run.sh`'s new `--outdir` flag) - every module's `publishDir` in `conf/modules.config` already
+  references `"${params.outdir}/toolname"`, so this one change nests an entire run's full output (report,
+  logs, every tool's files) under its own directory with zero changes needed anywhere else in the real
+  pipeline. Deliberately scoped to the UI-launched path only - `bin/run.sh`'s own default (no `--outdir`
+  given) is completely unchanged, so plain CLI usage keeps today's `results/` behavior exactly, matching how
+  `bin/inspect.sh` had *already* anticipated `--outdir` varying per run (its own `find_outdir()` recovers
+  whatever value a specific past run actually used, rather than assuming the fixed default) - this fills in
+  a gap that tool was already designed around, not a foreign pattern being forced in.
+  `ui/app.py`'s own run-tracking also needed rework: the old bare-PID-text `.streamlit_run.pid` couldn't say
+  *which* outdir a still-in-progress run was using, so a fresh session reattaching to it had no way to find
+  its eventual report - replaced with a small JSON `.streamlit_run.json` (`{pid, outdir}`). The "no session
+  tracked, show something" fallback now scans every `results/run_*/multiqc/multiqc_report.html` and picks the
+  genuinely most-recently-modified one, rather than assuming a single fixed path exists.
+  **Composer-ui's Run History** (`src/pages/HistoryPage.tsx`) is now a real table, not a single embedded
+  report: a new `/reports-api/runs` endpoint (`serve-results-plugin.ts`, the same dev-server-only Vite plugin
+  from the entry above, extended) lists every `results/run_*` directory (id parsed into a real timestamp,
+  whether it has a report at all - a failed run might not), sorted newest first; a `DELETE
+  /reports-api/runs/<id>` endpoint removes one's entire directory (path-traversal-guarded the same way the
+  existing static file serving already was). The table shows Date/Status/Actions per run - **View** opens
+  that run's real report inline with a "back to list" affordance (addressing "too crowded" directly: the
+  report itself doesn't render at all until a specific run is chosen, not by default on page load anymore),
+  **Export** is a plain `<a download>` to the same same-origin URL the iframe already uses (a real browser
+  download, not subject to any artifact-style sandboxing - this is the user's own local dev server), and
+  **Delete** asks for confirmation (`window.confirm`, unavoidable for a real destructive action) before
+  calling the DELETE endpoint and refreshing the list.
+  While rebuilding this, also removed the `test_aws` environment (owner, same conversation: "its going to be
+  just a windows running in ec2... there should be just dev and prod") - `ui/app.py`'s dropdown, `bin/run.sh`'s
+  usage docstring, `nextflow.config`'s profile comment, and Open #3 below all updated; `dev`/`prod` stay in
+  the list as already-documented, still-unbuilt gaps (Open #3), not built out by this change.
+  **Verified for real, not just written**: launched two genuine pipeline runs via `bin/run.sh ... --outdir
+  results/run_<timestamp>` (the exact mechanism `ui/app.py` now uses), confirmed both appear correctly
+  ordered in the live Run History table, clicking View on one renders its real MultiQC report with the
+  correct timestamp header, and a direct `DELETE /reports-api/runs/<id>` call genuinely removed that run's
+  directory from disk (confirmed via `ls`) and the table correctly dropped to one row after Refresh. New test
+  coverage: `src/pages/HistoryPage.test.tsx` rewritten for the list-based UI (8 tests - empty state, listing
+  multiple runs, View shows the right report and Back returns to the list, disabled actions for a run with no
+  report, Export's real download link, Delete's confirm-then-refresh flow including a declined-confirmation
+  case, load-failure fallback). `ui/test_app.py` updated for the JSON meta file and per-run report paths, 8
+  tests still passing, plus a pre-existing unused-import lint error (`ruff` F401, predating this session's own
+  edits) fixed along the way. Test suite: 90 → 94 (composer-ui), 8 unchanged (`ui/test_app.py`).

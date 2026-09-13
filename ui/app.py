@@ -7,6 +7,7 @@ reruns + st.fragment(run_every=...) to poll it without a full-page rerun.
 """
 
 import datetime
+import json
 import os
 import shutil
 import signal
@@ -18,18 +19,18 @@ import streamlit as st
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RUN_SCRIPT = REPO_ROOT / "bin" / "run.sh"
 DEBUG_SCRIPT = REPO_ROOT / "bin" / "debug.sh"
-MULTIQC_REPORT = REPO_ROOT / "results" / "multiqc" / "multiqc_report.html"
+RESULTS_ROOT = REPO_ROOT / "results"
 UPLOAD_DIR = REPO_ROOT / "assets" / "uploads"
 LOG_PATH = REPO_ROOT / ".streamlit_run.log"
-# Written when a run starts, removed when the UI itself notices it finished -
-# added 2026-09-12 (owner: "what if they go home and comeback the next day")
-# to close the one gap Fixed #21 deliberately left open: that fix recovers a
-# *finished* run's report after a fresh session (page reload, new tab,
-# another device), but a session that reloads while a run is still genuinely
-# in progress had no way to know that - only "no run tracked" or "here's an
-# old report," never "still running, check back." A live process's PID
-# survives independently of any one browser session's st.session_state.
-PID_FILE = REPO_ROOT / ".streamlit_run.pid"
+# Replaces the old bare-PID-text .streamlit_run.pid, 2026-09-13 (owner: "we
+# see all previous runs, we can delete some, export some and view what we
+# select"): each run now gets its own timestamped --outdir (bin/run.sh),
+# so reattaching to a run that's still in progress needs to know WHICH
+# outdir it's using, not just that it's alive - a plain pid number isn't
+# enough information anymore. Written when a run starts, removed when the
+# UI itself notices it finished. Survives independently of any one browser
+# session's st.session_state, same reasoning as the file it replaces.
+RUN_META_FILE = REPO_ROOT / ".streamlit_run.json"
 
 
 def _pid_alive(pid: int) -> bool:
@@ -39,6 +40,24 @@ def _pid_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _report_path(outdir: str) -> Path:
+    return REPO_ROOT / outdir / "multiqc" / "multiqc_report.html"
+
+
+def _latest_report() -> Path | None:
+    """Most recently generated report across every retained run, or None.
+
+    Used only when nothing (this session or a reattached one) names a
+    specific run to show - the general "no run tracked, but something
+    finished at some point" fallback. Run History (composer-ui) is the
+    real way to browse every retained run; this is just this page's own
+    still-useful default view.
+    """
+    reports = list(RESULTS_ROOT.glob("run_*/multiqc/multiqc_report.html"))
+    return max(reports, key=lambda p: p.stat().st_mtime) if reports else None
+
 
 # layout="wide" (was "centered") - owner 2026-09-13: "so much wasted space".
 # Streamlit's "centered" layout fixes content to a narrow, ~730px column
@@ -51,30 +70,35 @@ st.title("microbox")
 st.caption("Drop a samplesheet, click Run, open the report when it's done.")
 
 st.session_state.setdefault("proc", None)
+st.session_state.setdefault("outdir", None)
 
 # "test" listed (and defaulted to) first, not "dev": found 2026-09-11
-# click-testing this exact dropdown end to end - dev/test_aws/prod have no
-# Nextflow profile block yet (docs/KNOWN_ISSUES.md #3, a known and
-# documented gap), so defaulting to "dev" meant every first-time user who
-# just uploaded a file and clicked Run got an opaque failure before ever
-# seeing the pipeline itself run. "test" is the only profile that works with
-# zero setup today; the others stay in the list (so the option is visible
-# and the gap stays honest) but never as the trap a new user lands on by
-# default.
-profile = st.selectbox("Environment", ["test", "dev", "test_aws", "prod"], index=0)
+# click-testing this exact dropdown end to end - dev/prod have no Nextflow
+# profile block yet (docs/KNOWN_ISSUES.md #3, a known and documented gap),
+# so defaulting to "dev" meant every first-time user who just uploaded a
+# file and clicked Run got an opaque failure before ever seeing the
+# pipeline itself run. "test" is the only profile that works with zero
+# setup today; the others stay in the list (so the option is visible and
+# the gap stays honest) but never as the trap a new user lands on by
+# default. No separate "test_aws" tier - removed 2026-09-13 (owner:
+# "its going to be just a windows running in ec2... there should be just
+# dev and prod") - production is one normal Windows EC2 VM (PLAN.md §7's
+# resolved deployment decision), not a distinct AWS-only environment.
+profile = st.selectbox("Environment", ["test", "dev", "prod"], index=0)
 uploaded = st.file_uploader("Samplesheet (CSV)", type="csv")
 
 proc = st.session_state.proc
 is_running = proc is not None and proc.poll() is None
-if not is_running and PID_FILE.exists():
+if not is_running and RUN_META_FILE.exists():
     # No live Popen in *this* session, but a run started from a different
     # session (another tab, another browser, a fresh reload) might still be
     # going - check the PID it left behind. Needed so the `run_every=2`
     # auto-poll below actually fires for a reattached run too, not just one
     # this exact session started.
     try:
-        is_running = _pid_alive(int(PID_FILE.read_text().strip()))
-    except ValueError:
+        meta = json.loads(RUN_META_FILE.read_text())
+        is_running = _pid_alive(int(meta["pid"]))
+    except (ValueError, KeyError, json.JSONDecodeError):
         pass
 
 # Disk-space preflight - added 2026-09-12, same "go home and comeback"
@@ -99,6 +123,15 @@ if st.button("Run", disabled=is_running or uploaded is None, type="primary"):
     samplesheet_path = UPLOAD_DIR / uploaded.name
     samplesheet_path.write_bytes(uploaded.getvalue())
 
+    # A fresh, timestamped --outdir per run (not the old fixed 'results/')
+    # - 2026-09-13, so every run's full output (including its own
+    # multiqc_report.html) is retained side by side instead of the next
+    # run silently overwriting it. bin/run.sh's own default is unchanged
+    # for plain CLI use (no --outdir given there still means 'results/') -
+    # this UI is the one caller that actually wants per-run history, so it's
+    # the one that asks for it explicitly.
+    run_outdir = f"results/run_{datetime.datetime.now().astimezone():%Y%m%d_%H%M%S}"
+
     # Deliberate, not an oversight, hence the noqa below: this handle is
     # NOT closed here or wrapped in `with` - it's handed to subprocess.Popen
     # below as stdout and must stay open for the run's entire lifetime,
@@ -113,14 +146,15 @@ if st.button("Run", disabled=is_running or uploaded is None, type="primary"):
     # able to signal the whole run tree via os.killpg() without also
     # signaling the Streamlit server it's part of otherwise.
     new_proc = subprocess.Popen(
-        ["bash", str(RUN_SCRIPT), str(samplesheet_path), "--profile", profile],
+        ["bash", str(RUN_SCRIPT), str(samplesheet_path), "--profile", profile, "--outdir", run_outdir],
         cwd=REPO_ROOT,
         stdout=log_file,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
     st.session_state.proc = new_proc
-    PID_FILE.write_text(str(new_proc.pid))
+    st.session_state.outdir = run_outdir
+    RUN_META_FILE.write_text(json.dumps({"pid": new_proc.pid, "outdir": run_outdir}))
     st.rerun()
 
 
@@ -141,7 +175,7 @@ def _cancel_run(pid: int) -> None:
         os.killpg(os.getpgid(pid), signal.SIGTERM)
     except ProcessLookupError:
         pass
-    PID_FILE.unlink(missing_ok=True)
+    RUN_META_FILE.unlink(missing_ok=True)
 
 
 @st.fragment(run_every=2 if is_running else None)
@@ -154,14 +188,16 @@ def status_panel() -> None:
         # fresh session (page reload, new tab, another device), but gives no
         # signal at all for a run that's still genuinely in progress when the
         # session reloads - only "no run tracked" or "here's an old report,"
-        # never "it's still going, check back." PID_FILE (written when Run is
-        # clicked) survives independently of any one session's
+        # never "it's still going, check back." RUN_META_FILE (written when
+        # Run is clicked) survives independently of any one session's
         # st.session_state, so a fresh session can tell the difference.
-        if PID_FILE.exists():
+        if RUN_META_FILE.exists():
+            pid = None
             try:
-                pid = int(PID_FILE.read_text().strip())
-            except ValueError:
-                pid = None
+                meta = json.loads(RUN_META_FILE.read_text())
+                pid = int(meta["pid"])
+            except (ValueError, KeyError, json.JSONDecodeError):
+                pass
             if pid is not None and _pid_alive(pid):
                 st.info("A run is still in progress, started from a different session - this page will keep checking while it's open.")
                 # Raw Nextflow output (container pull logs, work-directory
@@ -179,7 +215,7 @@ def status_panel() -> None:
                 return
             # Stale file - the process it named is gone (crashed, or finished
             # in a session that never got the chance to clean up after it).
-            PID_FILE.unlink(missing_ok=True)
+            RUN_META_FILE.unlink(missing_ok=True)
         # A page reload/reconnect (new tab, refresh, different device) starts
         # a brand new Streamlit session with no session_state at all - the
         # subprocess handle above is gone even if that subprocess finished
@@ -191,19 +227,24 @@ def status_panel() -> None:
         # "Running..." for minutes after the process actually exited). A
         # finished run's report is just a file, and hiding a file that's
         # already on disk is strictly worse than showing it with its age so
-        # the viewer can judge freshness themselves.
-        if MULTIQC_REPORT.exists():
+        # the viewer can judge freshness themselves. Every past run is kept
+        # now (2026-09-13, its own timestamped outdir), so this shows
+        # whichever one is genuinely the most recent - see Run History for
+        # every other one.
+        latest_report = _latest_report()
+        if latest_report is not None:
             # .astimezone() attaches the system's local tzinfo to what would
             # otherwise be a naive datetime - same displayed wall-clock value
             # as before (this machine's local time), just explicit about it
             # rather than ambiguous, per Ruff's DTZ006.
-            mtime = datetime.datetime.fromtimestamp(MULTIQC_REPORT.stat().st_mtime).astimezone()
+            mtime = datetime.datetime.fromtimestamp(latest_report.stat().st_mtime).astimezone()
             st.info(
                 "No run is tracked in this browser session, but a report already exists on disk "
                 f"(generated {mtime:%Y-%m-%d %H:%M:%S}) - showing it below. If you just started a run "
-                "in another tab, wait for it to finish, then refresh this page."
+                "in another tab, wait for it to finish, then refresh this page. Every past run is kept - "
+                "see Run History to browse all of them."
             )
-            st.components.v1.html(MULTIQC_REPORT.read_text(errors="ignore"), height=800, scrolling=True)
+            st.components.v1.html(latest_report.read_text(errors="ignore"), height=800, scrolling=True)
         else:
             st.info("No run started yet.")
         return
@@ -211,25 +252,26 @@ def status_panel() -> None:
     return_code = proc.poll()
     label = "Running..." if return_code is None else "Completed" if return_code == 0 else f"Failed (exit {return_code})"
     state = "running" if return_code is None else "complete" if return_code == 0 else "error"
+    multiqc_report = _report_path(st.session_state.outdir)
 
     if return_code is None:
         if st.button("Cancel this run", key="cancel_tracked"):
             _cancel_run(proc.pid)
             st.rerun()
     else:
-        # Run reached a real end state - clean up the PID file, but ONLY if
+        # Run reached a real end state - clean up the meta file, but ONLY if
         # it still names *this* run. Found the hard way testing this exact
-        # scenario 2026-09-12: PID_FILE is a single shared file, not scoped
-        # per session - a tab left open after its own run finished still
-        # reruns this fragment periodically (Streamlit reruns on almost any
+        # scenario 2026-09-12: the meta file is shared, not scoped per
+        # session - a tab left open after its own run finished still reruns
+        # this fragment periodically (Streamlit reruns on almost any
         # interaction, not just the run_every timer), and an unconditional
-        # unlink() here would delete a *different*, newer run's PID file out
+        # unlink() here would delete a *different*, newer run's meta file out
         # from under it if one had since started elsewhere. Comparing
         # against proc.pid before deleting is what makes this safe.
         try:
-            if PID_FILE.exists() and int(PID_FILE.read_text().strip()) == proc.pid:
-                PID_FILE.unlink()
-        except ValueError:
+            if RUN_META_FILE.exists() and json.loads(RUN_META_FILE.read_text())["pid"] == proc.pid:
+                RUN_META_FILE.unlink()
+        except (ValueError, KeyError, json.JSONDecodeError):
             pass
 
     with st.status(label, state=state, expanded=return_code not in (None, 0)):
@@ -258,9 +300,9 @@ def status_panel() -> None:
         if debug_result.stderr:
             st.caption(debug_result.stderr)
 
-    if return_code == 0 and MULTIQC_REPORT.exists():
+    if return_code == 0 and multiqc_report.exists():
         st.success("Report ready - also available anytime from the Run History page.")
-        st.components.v1.html(MULTIQC_REPORT.read_text(errors="ignore"), height=800, scrolling=True)
+        st.components.v1.html(multiqc_report.read_text(errors="ignore"), height=800, scrolling=True)
     elif return_code == 0:
         # No raw filesystem path in the message - owner 2026-09-13: "i dont
         # expect nontechnical people to have to access a path... like that."
@@ -268,7 +310,7 @@ def status_panel() -> None:
         # want it.
         st.warning("Run finished, but no report was produced.")
         with st.expander("Technical details"):
-            st.code(str(MULTIQC_REPORT), language="text")
+            st.code(str(multiqc_report), language="text")
 
 
 status_panel()

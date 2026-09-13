@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Thin wrapper so the team never types Nextflow flags directly.
-# Usage: ./bin/run.sh <samplesheet.csv> [--profile dev|test|test_aws|prod]
+# Usage: ./bin/run.sh <samplesheet.csv> [--profile dev|test|prod] [--outdir <dir>]
 set -euo pipefail
 
 # Ensure Java/Nextflow are on PATH regardless of how this script was invoked
@@ -32,13 +32,36 @@ if [[ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
   set -u
 fi
 
-SAMPLESHEET="${1:?Usage: run.sh <samplesheet.csv> [--profile <env>]}"
+SAMPLESHEET="${1:?Usage: run.sh <samplesheet.csv> [--profile <env>] [--outdir <dir>]}"
 shift
 
 PROFILE="dev"
-if [[ "${1:-}" == "--profile" ]]; then
-  PROFILE="${2:?--profile needs a value}"
-fi
+OUTDIR=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      PROFILE="${2:?--profile needs a value}"
+      shift 2
+      ;;
+    --outdir)
+      # Optional - if omitted, nextflow.config's own default ('results')
+      # applies exactly as before. Added 2026-09-13 (owner: "we see all
+      # previous runs, we can delete some, export some and view what we
+      # select") so a caller that wants per-run history (ui/app.py, one
+      # freshly-timestamped outdir per launched run) can ask for it,
+      # without changing plain CLI usage's existing behavior at all -
+      # bin/inspect.sh already anticipated --outdir varying per run
+      # (its own find_outdir() recovers whatever value a specific past
+      # run actually used, rather than assuming the fixed default).
+      OUTDIR="${2:?--outdir needs a value}"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -56,6 +79,11 @@ if [[ -f "params/${PROFILE}.yaml" ]]; then
   PARAMS_FILE_ARG=(-params-file "params/${PROFILE}.yaml")
 fi
 
+OUTDIR_ARG=()
+if [[ -n "$OUTDIR" ]]; then
+  OUTDIR_ARG=(--outdir "$OUTDIR")
+fi
+
 # Exit status captured via PIPESTATUS (nextflow's, not tee's) and the `set
 # +e`/`set -e` bracket around it - needed to print the bin/debug.sh hint
 # below on failure *and* still propagate the real exit code afterwards
@@ -66,6 +94,7 @@ set +e
 nextflow run main.nf \
   -profile "${PROFILE},docker" \
   "${PARAMS_FILE_ARG[@]}" \
+  "${OUTDIR_ARG[@]}" \
   --input "$SAMPLESHEET" \
   -resume 2>&1 | tee "$LOG_FILE"
 NF_EXIT="${PIPESTATUS[0]}"

@@ -45,6 +45,10 @@ yet (`nextflow.config`'s `manifest.version` is still `0.1.0`), so everything to 
   `gitleaks` secrets scan, on every push/PR.
 - `ui/requirements-dev.txt` — pinned dev tooling (`pytest`, `ruff`) for the UI, installed automatically by
   `bin/setup-dev.sh`.
+- A second, independent Kraken2/Bracken classification pass (`--skip_kraken2_predepletion false`) — classifies
+  reads right after trimming/QC, before host depletion, alongside the existing post-depletion pass
+  (`skip_kraken2`). Matches a real reference pipeline diagram provided by the project's R&D team, where
+  Kraken2 is fed directly by FastQC's reads as its primary path.
 
 ### Changed
 - `README.md` rewritten to reflect the project's actual current (functional, validated) state.

@@ -22,17 +22,27 @@
 // exists in the real pipeline at all," which is what was asked for and what
 // actually caught the mistakes in a real user-drawn graph.
 export const VALID_CONNECTIONS: Record<string, string[]> = {
-  // fastp's trimmed reads feed both FastQC (a QC report, not a further
-  // transform) and Bowtie2 (host depletion) - and fastp's own JSON report
-  // is one of the files MultiQC aggregates.
-  fastp: ['fastqc', 'bowtie2', 'multiqc'],
-  // FastQC is a dead end in the data flow - its output is a report, nothing
-  // downstream consumes it except MultiQC's aggregation.
-  fastqc: ['multiqc'],
-  // Bowtie2's depleted reads feed whichever assembler runs, Kraken2 (fastq
-  // entry classifies READS, not contigs - see the ch_classify_input_raw
-  // ternary), and MaxBin2 (one of its two required inputs). Its own log
-  // also feeds MultiQC.
+  // fastp's trimmed reads feed FastQC (a QC report, not a further
+  // transform), Bowtie2 (host depletion), and - added 2026-09-13, a real
+  // R&D-provided reference pipeline diagram - Kraken2 directly, as an
+  // independent PRE-depletion classification pass (params.
+  // skip_kraken2_predepletion) that runs alongside the existing
+  // post-depletion one below, not instead of it. fastp's own JSON report is
+  // also one of the files MultiQC aggregates.
+  fastp: ['fastqc', 'bowtie2', 'kraken2', 'multiqc'],
+  // FastQC doesn't transform reads (its output is a report) - "FastQC's
+  // reads" and "fastp's reads" are the same channel, so FastQC validly
+  // feeds Kraken2 too, for the same pre-depletion classification pass as
+  // fastp above (the R&D diagram draws this exact arrow, FastQC directly to
+  // Kraken2, as the primary/solid one). Otherwise a dead end - nothing else
+  // downstream consumes FastQC's own output except MultiQC's aggregation.
+  fastqc: ['kraken2', 'multiqc'],
+  // Bowtie2's depleted reads feed whichever assembler runs, Kraken2 (a
+  // SECOND, independent, post-depletion classification pass - fastq entry
+  // classifies READS, not contigs - see the ch_classify_input_raw ternary;
+  // this is the dotted/optional arrow in the R&D reference diagram, since
+  // it only exists when host depletion itself is enabled), and MaxBin2 (one
+  // of its two required inputs). Its own log also feeds MultiQC.
   bowtie2: ['megahit', 'metaspades', 'kraken2', 'maxbin2', 'multiqc'],
   // MEGAHIT's contigs feed QUAST, geNomad, and MaxBin2 (its other required
   // input) - MEGAHIT never feeds Kraken2 directly (fastq-entry Kraken2

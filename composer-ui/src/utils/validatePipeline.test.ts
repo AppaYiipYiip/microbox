@@ -42,6 +42,24 @@ describe('findInvalidEdges', () => {
     expect(findInvalidEdges(nodes, edges)).toEqual([])
   })
 
+  // Added 2026-09-13: a real reference pipeline diagram from the owner's
+  // R&D team draws Kraken2 fed directly by FastQC's reads (the PRIMARY/
+  // solid arrow, before host depletion), alongside the pre-existing
+  // Bowtie2->Kraken2 path (the DOTTED/optional arrow, after depletion) -
+  // workflows/microbox.nf's params.skip_kraken2_predepletion now
+  // implements exactly this as a second, independent classification pass.
+  it('accepts fastp -> Kraken2 (the new pre-depletion classification pass)', () => {
+    const nodes = [node('a', 'fastp'), node('b', 'kraken2')]
+    const edges = [edge('e1', 'a', 'b')]
+    expect(findInvalidEdges(nodes, edges)).toEqual([])
+  })
+
+  it('accepts FastQC -> Kraken2 (same pre-depletion pass - FastQC does not transform reads, it shares fastp\'s channel)', () => {
+    const nodes = [node('a', 'fastqc'), node('b', 'kraken2')]
+    const edges = [edge('e1', 'a', 'b')]
+    expect(findInvalidEdges(nodes, edges)).toEqual([])
+  })
+
   it('ignores edges whose endpoints are not both known nodes', () => {
     const nodes = [node('a', 'fastp')]
     const edges = [edge('e1', 'a', 'does-not-exist')]

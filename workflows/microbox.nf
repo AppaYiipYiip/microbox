@@ -8,6 +8,12 @@ include { MEGAHIT          } from '../modules/nf-core/megahit/main'
 include { SPADES           } from '../modules/nf-core/spades/main'
 include { KRAKEN2_KRAKEN2  } from '../modules/nf-core/kraken2/kraken2/main'
 include { BRACKEN_BRACKEN  } from '../modules/nf-core/bracken/bracken/main'
+// Aliased imports for the SECOND, independent pre-depletion classification
+// pass (params.skip_kraken2_predepletion, added 2026-09-13) - Nextflow DSL2
+// can't call the same process twice in one workflow without an `as` alias
+// on a second include, the standard nf-core pattern for reusing a module.
+include { KRAKEN2_KRAKEN2 as KRAKEN2_KRAKEN2_PREDEPLETION } from '../modules/nf-core/kraken2/kraken2/main'
+include { BRACKEN_BRACKEN as BRACKEN_BRACKEN_PREDEPLETION } from '../modules/nf-core/bracken/bracken/main'
 include { GENOMAD_ENDTOEND } from '../modules/nf-core/genomad/endtoend/main'
 include { CHECKV_ENDTOEND  } from '../modules/nf-core/checkv/endtoend/main'
 include { QUAST            } from '../modules/nf-core/quast/main'
@@ -23,6 +29,11 @@ workflow MICROBOX {
     main:
     ch_multiqc_files  = Channel.empty()
     ch_bowtie2_log    = Channel.empty()
+    // Declared here (not just inside the fastq-only branch below) so it
+    // stays in scope for the pre-depletion Kraken2/Bracken block further
+    // down, which needs it but lives outside that branch - same pattern
+    // already used for ch_depleted_reads/ch_contigs just below.
+    ch_trimmed_reads  = Channel.empty()
     ch_depleted_reads = Channel.empty()
     ch_contigs        = Channel.empty()
 
@@ -306,6 +317,55 @@ workflow MICROBOX {
         }
     }
 
+    // A SECOND, independent Kraken2 classification pass - added 2026-09-13
+    // at the owner's request, matching a real reference pipeline diagram
+    // their R&D team provided: FastQC's reads feed Kraken2 directly (a
+    // solid, primary arrow in that diagram) as well as - separately -
+    // Bowtie2's depleted reads feeding Kraken2 (a DOTTED, optional arrow in
+    // the same diagram - already what skip_kraken2 above implements, since
+    // it's gated behind skip_host_removal being enabled too). Both are
+    // genuinely useful and not a duplicate: this pass sees the full
+    // community composition INCLUDING host DNA (run right after trimming/
+    // QC, before any depletion), while the existing pass above sees the
+    // purely-microbial picture. FastQC itself doesn't transform reads (it
+    // only emits a report), so "FastQC's reads" and "ch_trimmed_reads" are
+    // the same channel - there is no separate transformed channel to
+    // classify FastQC's own output from.
+    //
+    // fastq entry point only - there is no "pre-depletion reads" concept on
+    // the contigs entry point (ch_trimmed_reads stays Channel.empty() there,
+    // same as ch_depleted_reads) - guarded the same "inapplicable
+    // combination made to not-happen automatically" way as
+    // skip_host_removal-on-contigs. Same kraken2_db as the pass above - one
+    // DB serves both.
+    ch_kraken2_predepletion_report = Channel.empty()
+    ch_bracken_predepletion_report = Channel.empty()
+
+    if (!params.skip_kraken2_predepletion && params.input_type != 'fastq') {
+        log.warn "skip_kraken2_predepletion=false but there are no pre-depletion reads on the contigs entry point (nothing exists before assembly there) - skipping it automatically rather than running on nothing."
+    }
+
+    if (!params.skip_kraken2_predepletion && params.input_type == 'fastq') {
+        ch_kraken2_predepletion_db = file(params.kraken2_db, checkIfExists: true, type: 'dir')
+
+        KRAKEN2_KRAKEN2_PREDEPLETION(
+            ch_trimmed_reads,
+            ch_kraken2_predepletion_db,
+            false, // save_output_fastqs
+            false  // save_reads_assignment
+        )
+        ch_kraken2_predepletion_report = KRAKEN2_KRAKEN2_PREDEPLETION.out.report.map { meta, f -> f }
+
+        // Same skip_bracken flag as the post-depletion pass above - one
+        // toggle for "re-estimate abundance," applied to every Kraken2 pass
+        // that's actually running, rather than a second flag no one asked
+        // for.
+        if (!params.skip_bracken) {
+            BRACKEN_BRACKEN_PREDEPLETION(KRAKEN2_KRAKEN2_PREDEPLETION.out.report, ch_kraken2_predepletion_db)
+            ch_bracken_predepletion_report = BRACKEN_BRACKEN_PREDEPLETION.out.txt.map { meta, f -> f }
+        }
+    }
+
     // Viral/plasmid discovery (geNomad) + quality assessment of what it
     // finds (CheckV) - PLAN.md §9 tool catalogue, the two tools this
     // toolbox's actual vaccine-R&D use case cares about most: finding
@@ -454,6 +514,8 @@ workflow MICROBOX {
     ch_multiqc_files_guarded = ch_multiqc_files
         .mix(ch_kraken2_report)
         .mix(ch_bracken_report)
+        .mix(ch_kraken2_predepletion_report)
+        .mix(ch_bracken_predepletion_report)
         .mix(ch_quast_results)
         // A real, reachable degenerate case, not hypothetical: input_type
         // contigs + skip_quast + Kraken2 left off (its default) leaves

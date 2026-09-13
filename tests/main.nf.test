@@ -166,6 +166,11 @@ nextflow_pipeline {
     // behavioral configurations on the fastq entry point alone (2 fastp ×
     // 2 fastqc × 2 host_removal × 3 effective megahit/quast joint states ×
     // 3 effective kraken2/bracken joint states) + 4 on contigs = 76 total.
+    // Addendum, 2026-09-13: skip_kraken2_predepletion adds a further
+    // genuinely independent toggle (its own separate Kraken2/Bracken pass,
+    // see the "pre-depletion classification" tests below) - the count above
+    // predates it and is not recomputed here; see docs/KNOWN_ISSUES.md's
+    // 2026-09-13 entry for that feature's own rationale and test coverage.
     // Not exhaustively tested one-by-one here (76 full-pipeline Docker runs
     // would be redundant given how orthogonal these flags are, and no
     // major bioinformatics test suite - nf-core, Galaxy - does exhaustive
@@ -550,6 +555,102 @@ nextflow_pipeline {
             // as #13 (QUAST/MultiQC). Guard against regressing.
             assert path("${outputDir}/kraken2/test.kraken2.report.txt").text.trim().length() > 0
             assert !path("${outputDir}/bracken").exists()
+        }
+    }
+
+    // ============================================================
+    // A SECOND, independent Kraken2 classification pass - added 2026-09-13
+    // at the owner's request, matching a real reference pipeline diagram
+    // their R&D team provided (FastQC's reads feed Kraken2 directly, as
+    // well as - separately, optionally - Bowtie2's depleted reads). See
+    // workflows/microbox.nf's params.skip_kraken2_predepletion block.
+    // ============================================================
+
+    test("fastq: pre-depletion Kraken2+Bracken classify the trimmed reads (before host removal) when explicitly enabled") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir                    = "$outputDir"
+                skip_kraken2_predepletion = false
+                kraken2_db                = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/kraken2_predepletion/test_predepletion.kraken2.report.txt").exists()
+            assert path("${outputDir}/bracken_predepletion/test_predepletion.tsv").exists()
+            // The post-depletion pass (skip_kraken2, default true) must
+            // stay off - these two flags are genuinely independent.
+            assert !path("${outputDir}/kraken2").exists()
+            assert !path("${outputDir}/bracken").exists()
+        }
+    }
+
+    test("fastq: both Kraken2 passes enabled together produce two distinct, non-colliding reports") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir                    = "$outputDir"
+                skip_kraken2              = false
+                skip_kraken2_predepletion = false
+                kraken2_db                = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            // Both classifications ran on the SAME sample (same meta.id) -
+            // ext.prefix on the predepletion pass (conf/modules.config)
+            // must keep their filenames from colliding, or one would
+            // silently overwrite the other on disk / in MultiQC.
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert path("${outputDir}/kraken2_predepletion/test_predepletion.kraken2.report.txt").exists()
+            assert path("${outputDir}/bracken/test.tsv").exists()
+            assert path("${outputDir}/bracken_predepletion/test_predepletion.tsv").exists()
+        }
+    }
+
+    test("fastq: pre-depletion Kraken2 enabled but skip_bracken=true - classification without re-estimation") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir                    = "$outputDir"
+                skip_kraken2_predepletion = false
+                skip_bracken              = true
+                kraken2_db                = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/kraken2_predepletion/test_predepletion.kraken2.report.txt").exists()
+            assert !path("${outputDir}/bracken_predepletion").exists()
+        }
+    }
+
+    test("contigs: pre-depletion Kraken2 is inapplicable and auto-skips (no pre-depletion reads exist there)") {
+        tag "requires_db"
+
+        // Mirrors the existing skip_host_removal-on-contigs guard pattern -
+        // there is nothing before assembly on the contigs entry point, so
+        // this must not crash or silently misbehave, just log and skip.
+        when {
+            params {
+                outdir                    = "$outputDir"
+                input_type                = "contigs"
+                input                     = "${projectDir}/assets/samplesheet_test_contigs.csv"
+                skip_kraken2_predepletion = false
+                kraken2_db                = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/kraken2_predepletion").exists()
         }
     }
 

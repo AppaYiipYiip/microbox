@@ -4,7 +4,13 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**Composer canvas: connections silently failing "sometimes" root-caused and fixed** —
+Last updated: 2026-09-13 (**A real new Nextflow pipeline branch: Kraken2 now also classifies reads BEFORE
+host depletion** (`--skip_kraken2_predepletion false`), a second, independent pass alongside the existing
+post-depletion one — added after the owner supplied a real reference pipeline diagram from their R&D team
+showing this as the primary classification path. Verified via 5 new `nf-test` cases plus all 24 pre-existing
+ones, 0 regressions. Composer UI's connection-validation map updated to match. See "A genuine, real Nextflow
+pipeline addition..." below.
+**Composer canvas: connections silently failing "sometimes" root-caused and fixed** —
 React Flow's default `connectionMode="strict"` was silently rejecting any drag that grabbed a handle of the
 "wrong" role, with zero feedback; switching to `loose` mode alone just traded that for a different silent
 failure (a malformed edge that couldn't render), so the real fix normalizes the connection's source/target
@@ -823,3 +829,57 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   handle regardless of which end was grabbed first); no `error008` warnings in the console for the new edge.
   New regression coverage: `src/utils/handleRole.test.ts` (3 tests), `src/utils/normalizeConnection.test.ts`
   (3 tests), plus 4 new cases in `src/utils/isValidConnection.test.ts`. Test suite grew from 81 to 91.
+
+- **A genuine, real Nextflow pipeline addition: a second, independent Kraken2/Bracken pass BEFORE host
+  depletion, 2026-09-13** (owner: "im not sure why fastqc into kraken2 shows an error. thats literarly what
+  they be doing and the r&d team provided me as example of pipeline" - then supplied a photo of the actual
+  reference diagram). Investigated by reading `workflows/microbox.nf` line by line before touching anything:
+  the composer's warning was accurate for what the pipeline actually did at the time - FastQC only ever
+  produces a report (nothing downstream consumes it but MultiQC), and Kraken2 only classified Bowtie2's
+  depleted reads (fastq entry) or a contigs file (contigs entry). The photographed diagram clarified the real
+  intent once read closely (owner: "dotted lines means its optional") - FastQC → Kraken2 is drawn as a
+  SOLID/primary arrow, while the existing Bowtie2 → Kraken2 path is the DOTTED/optional one in that same
+  diagram. So the gap wasn't a UI bug to silence, it was a real, missing pipeline capability - confirmed with
+  the owner before touching `workflows/microbox.nf` (a real architecture decision, not a quick edit), who
+  chose "add it to the real pipeline" over just relaxing the composer's validation.
+  **What was built**, following the exact same pattern as MaxBin2/geNomad/CheckV/metaSPAdes (a genuine new
+  toggle, real module wiring, real test coverage, not a shortcut): a NEW, fully independent classification
+  pass, `params.skip_kraken2_predepletion` (default `true`, same DB-dependency reasoning as `skip_kraken2`),
+  classifying `ch_trimmed_reads` (whatever FastQC actually sees - it doesn't transform reads, so this is the
+  same channel fastp produces) - alongside, not instead of, the pre-existing post-depletion pass. Both are
+  genuinely useful and see different things: this pass sees the full community INCLUDING host DNA, the
+  existing pass sees the purely-microbial picture after Bowtie2 removes it. Implementation details that
+  needed real care, not just a copy-paste:
+  - Nextflow DSL2 can't call the same process twice in one workflow - used the standard nf-core pattern,
+    `include { KRAKEN2_KRAKEN2 as KRAKEN2_KRAKEN2_PREDEPLETION } from '...'` (same for Bracken).
+  - `ch_trimmed_reads` previously only existed inside the `input_type == 'fastq'` conditional block (Groovy's
+    implicit-declaration scoping rules mean it wasn't visible outside it) - added a top-level
+    `ch_trimmed_reads = Channel.empty()` declaration alongside `ch_depleted_reads`/`ch_contigs`'s existing
+    ones, so the new block (placed with the classification section, not nested in the fastq branch, matching
+    where the existing Kraken2 block already lives) can see it.
+  - Both passes classify the SAME sample (identical `meta.id`), so without an `ext.prefix` override both
+    would emit `sample1.kraken2.report.txt` - harmless on disk (separate `publishDir` paths per pass,
+    `results/kraken2/` vs `results/kraken2_predepletion/`) but a real, silent data-loss risk in MultiQC, which
+    keys its report table by filename-derived sample name and would show one "sample1" row silently
+    clobbering the other's data. Fixed with `ext.prefix = { "${meta.id}_predepletion" }` in
+    `conf/modules.config` for both new process aliases - verified this actually matters, not just theorized:
+    a new nf-test case runs BOTH passes together and asserts both distinct report files exist with the
+    correct content.
+  - fastq entry point only - guarded the same "inapplicable combination made to not-happen automatically, not
+    left to crash" way as `skip_host_removal`-on-contigs, since there's no "pre-depletion reads" concept when
+    there are no reads at all (contigs entry point).
+  - Reuses `skip_bracken` (no new flag) for Bracken re-estimation on this pass too, and the existing
+    `kraken2_db` param (one DB genuinely serves both passes - there's no reason they'd need different ones).
+  **Composer UI updated to match**: `pipelineTopology.ts` now allows `fastp -> kraken2` (the real data
+  producer) and `fastqc -> kraken2` (FastQC doesn't transform reads, so this is the same channel, and matches
+  the diagram's own drawn arrow) as valid connections, alongside the pre-existing `bowtie2 -> kraken2`. Cross-
+  checked the composer's full tool inventory against `workflows/microbox.nf`'s real `include` list while
+  investigating this (owner: "lets make sure we fully understand the current tools we have") - confirmed 1:1,
+  every real user-facing process has exactly one composer node and vice versa (`GZIP_CONTIGS`/
+  `BOWTIE2_BUILD` are internal helpers, correctly excluded from the palette).
+  **Verified for real, not assumed**: `nf-test test --tag requires_db --profile test,docker` - 5 new cases
+  (pre-depletion pass alone, both passes together with distinct non-colliding reports, `skip_bracken=true`
+  on the new pass, and the contigs-entry auto-skip guard), plus all 11 pre-existing `requires_db` cases and
+  all 13 `basic` cases still green (29 total, 0 regressions) - confirmed against the real downloaded `viral`
+  Kraken2 DB already present on this machine, not mocked. Composer-ui test suite grew from 91 to 93
+  (`pipelineTopology.ts`/`validatePipeline.test.ts` coverage for the two new valid connections).

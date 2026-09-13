@@ -68,6 +68,8 @@ nextflow.config           All pipeline params, declared once with a comment each
 bin/                      run.sh, run-ui.sh, download-dbs.sh, debug.sh, inspect.sh, setup-dev.sh, run-pavian.sh
 docker-compose.yml        Pavian - standalone Kraken2/Bracken report viewer, NOT part of the pipeline
 ui/app.py                 The Streamlit UI - talks to the pipeline ONLY via bin/run.sh + results/ files
+composer-ui/              PROTOTYPE: a separate React node-based pipeline composer - see its own README.md
+                          for status. Not connected to the pipeline yet, not the same thing as ui/.
 tests/main.nf.test        nf-test suite - tags: "basic" (fast, no DB) / "requires_db" (real DBs needed)
 docs/planning/PLAN.md     Every design decision, with rationale - the deep-dive reference
 docs/KNOWN_ISSUES.md      Bug log + "decisions worth remembering" - what's actually been verified

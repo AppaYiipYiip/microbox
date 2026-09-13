@@ -1,0 +1,26 @@
+.tool-node {
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  background: #222;
+  color: #eee;
+  padding: 0.5rem 0.75rem;
+  min-width: 140px;
+  font-size: 0.8rem;
+}
+
+.tool-node--selected {
+  border-color: #3a6cf4;
+  box-shadow: 0 0 0 2px rgba(58, 108, 244, 0.4);
+}
+
+.tool-node__category {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+.tool-node__name {
+  font-weight: 600;
+  margin-top: 0.15rem;
+}

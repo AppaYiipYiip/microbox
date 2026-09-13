@@ -38,6 +38,9 @@ yet (`nextflow.config`'s `manifest.version` is still `0.1.0`), so everything to 
   this file.
 - `docs/SBOM.md` — a full SBOM/license inventory (all pinned container images + the UI's Python
   environment), generated with `syft`.
+- `composer-ui/` — a prototype node-based pipeline composer (separate React app: React Flow, React
+  Router v8, react-i18next). Categorized draggable node palette, a working canvas, multi-page nav, live
+  French/English switching. Not yet connected to actually running the pipeline — see its own README.md.
 - `.github/workflows/ci.yml` — CI wiring: the `basic` nf-test suite, UI `ruff`/`pytest`, `shellcheck`, and a
   `gitleaks` secrets scan, on every push/PR.
 - `ui/requirements-dev.txt` — pinned dev tooling (`pytest`, `ruff`) for the UI, installed automatically by
@@ -67,6 +70,9 @@ yet (`nextflow.config`'s `manifest.version` is still `0.1.0`), so everything to 
   8 known species — a normal, expected over-binning outcome, not a red flag).
 - Pavian started for real and confirmed responding to an actual HTTP request (200, genuine Shiny HTML) —
   not just "the container starts".
+- `composer-ui/` verified via real browser testing (drag-drop node creation, click-to-select, live
+  French/English switching, real client-side navigation) plus a 13-test Vitest suite and a successful
+  production build.
 - All 11 pinned container images scanned for vulnerabilities (`trivy`) and inventoried for license
   compliance (`syft`, `docs/SBOM.md`) — see `docs/KNOWN_ISSUES.md` for findings.
 

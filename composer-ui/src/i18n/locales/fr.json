@@ -1,0 +1,41 @@
+{
+  "nav": {
+    "composer": "Compositeur",
+    "history": "Historique des analyses",
+    "brand": "microbox compositeur"
+  },
+  "composer": {
+    "title": "Compositeur de pipeline",
+    "paletteTitle": "Outils",
+    "canvasEmptyHint": "Glissez un outil depuis la palette vers la zone de travail pour l'ajouter à votre pipeline.",
+    "nodeSelected": "Nœud sélectionné",
+    "clearSelection": "Fermer"
+  },
+  "history": {
+    "title": "Historique des analyses",
+    "placeholder": "Cette page est un espace réservé - elle n'est pas encore connectée aux analyses réelles du pipeline (PLAN.md §6.16 est uniquement au stade des exigences et du prototype)."
+  },
+  "categories": {
+    "qc": "Contrôle qualité et découpage des lectures",
+    "hostDepletion": "Déplétion de l'hôte",
+    "assembly": "Assemblage et contrôle qualité de l'assemblage",
+    "classification": "Classification taxonomique",
+    "viralDiscovery": "Découverte virale et plasmidique",
+    "binning": "Regroupement génomique (binning)",
+    "reporting": "Rapport"
+  },
+  "tools": {
+    "fastp": { "name": "fastp", "description": "Découpe et filtre les lectures brutes selon leur qualité." },
+    "fastqc": { "name": "FastQC", "description": "Rapport de contrôle qualité des lectures." },
+    "bowtie2": { "name": "Bowtie2", "description": "Élimine les lectures de l'hôte par alignement." },
+    "megahit": { "name": "MEGAHIT", "description": "Assembleur métagénomique de novo rapide." },
+    "metaspades": { "name": "metaSPAdes", "description": "Assembleur de novo alternatif, plus précis mais plus lent." },
+    "kraken2": { "name": "Kraken2", "description": "Classification taxonomique par rapport à une base de données de référence." },
+    "bracken": { "name": "Bracken", "description": "Réestime l'abondance à partir d'un rapport Kraken2." },
+    "quast": { "name": "QUAST", "description": "Évaluation de la qualité de l'assemblage." },
+    "genomad": { "name": "geNomad", "description": "Identifie les séquences virales et plasmidiques dans les contigs." },
+    "checkv": { "name": "CheckV", "description": "Évalue la complétude et la contamination des génomes viraux." },
+    "maxbin2": { "name": "MaxBin2", "description": "Regroupe les contigs en bacs génomiques par organisme." },
+    "multiqc": { "name": "MultiQC", "description": "Agrège les résultats de tous les outils dans un seul rapport." }
+  }
+}

@@ -1,0 +1,46 @@
+.composer-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.composer-page__title {
+  margin: 0.75rem 1.25rem 0.5rem;
+  font-size: 1.1rem;
+  color: #eee;
+}
+
+.composer-page__layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.composer-page__detail {
+  width: 260px;
+  min-width: 220px;
+  border-left: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  color: #eee;
+  padding: 1rem;
+  position: relative;
+}
+
+.composer-page__detail-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: transparent;
+  border: 1px solid #444;
+  color: #aaa;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.composer-page__detail-close:hover {
+  color: #fff;
+  border-color: #666;
+}

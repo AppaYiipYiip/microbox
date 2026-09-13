@@ -1,0 +1,20 @@
+.pipeline-canvas {
+  flex: 1;
+  position: relative;
+  background: #101010;
+}
+
+.pipeline-canvas__empty-hint {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  color: #888;
+  font-size: 0.85rem;
+  pointer-events: none;
+  background: rgba(20, 20, 20, 0.85);
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #333;
+}

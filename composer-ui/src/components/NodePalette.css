@@ -1,0 +1,65 @@
+.node-palette {
+  width: 260px;
+  min-width: 220px;
+  border-right: 1px solid #2a2a2a;
+  padding: 1rem;
+  overflow-y: auto;
+  background: #1a1a1a;
+  color: #eee;
+}
+
+.node-palette__title {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #999;
+  margin: 0 0 0.75rem;
+}
+
+.node-palette__category {
+  margin-bottom: 1.25rem;
+}
+
+.node-palette__category-title {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin: 0 0 0.4rem;
+  font-weight: 500;
+}
+
+.node-palette__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tool-card {
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  background: #222;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.tool-card:hover {
+  border-color: #3a6cf4;
+  background: #262b3a;
+}
+
+.tool-card:active {
+  cursor: grabbing;
+}
+
+.tool-card__name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.tool-card__description {
+  font-size: 0.72rem;
+  color: #999;
+}

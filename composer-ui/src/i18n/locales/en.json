@@ -1,0 +1,41 @@
+{
+  "nav": {
+    "composer": "Composer",
+    "history": "Run History",
+    "brand": "microbox composer"
+  },
+  "composer": {
+    "title": "Pipeline Composer",
+    "paletteTitle": "Tools",
+    "canvasEmptyHint": "Drag a tool from the palette onto the canvas to add it to your pipeline.",
+    "nodeSelected": "Selected node",
+    "clearSelection": "Close"
+  },
+  "history": {
+    "title": "Run History",
+    "placeholder": "This page is a placeholder - it is not yet connected to real pipeline runs (PLAN.md §6.16 is requirements/prototype only)."
+  },
+  "categories": {
+    "qc": "Read QC & Trimming",
+    "hostDepletion": "Host Depletion",
+    "assembly": "Assembly & Assembly QC",
+    "classification": "Taxonomic Classification",
+    "viralDiscovery": "Viral & Plasmid Discovery",
+    "binning": "Genome Binning",
+    "reporting": "Reporting"
+  },
+  "tools": {
+    "fastp": { "name": "fastp", "description": "Trims and quality-filters raw reads." },
+    "fastqc": { "name": "FastQC", "description": "Read quality control report." },
+    "bowtie2": { "name": "Bowtie2", "description": "Depletes host reads by alignment." },
+    "megahit": { "name": "MEGAHIT", "description": "Fast de novo metagenomic assembler." },
+    "metaspades": { "name": "metaSPAdes", "description": "Alternative de novo assembler, more accurate but slower." },
+    "kraken2": { "name": "Kraken2", "description": "Taxonomic classification against a reference database." },
+    "bracken": { "name": "Bracken", "description": "Re-estimates abundance from a Kraken2 report." },
+    "quast": { "name": "QUAST", "description": "Assembly quality assessment." },
+    "genomad": { "name": "geNomad", "description": "Identifies viral and plasmid sequences in contigs." },
+    "checkv": { "name": "CheckV", "description": "Grades completeness and contamination of viral genomes." },
+    "maxbin2": { "name": "MaxBin2", "description": "Groups contigs into per-organism genome bins." },
+    "multiqc": { "name": "MultiQC", "description": "Aggregates every tool's output into one report." }
+  }
+}

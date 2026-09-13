@@ -25,7 +25,7 @@
   - [6.4 GUI-agnostic core shape](#64-target-implementation-shape-option-b--pipeline-core-is-gui-agnostic) · [6.5 Accessibility/ownership](#65-accessibility--ownership-model-owner-decision-2026-09-11) · [6.6 Design decisions settled during coding](#66-design-decisions-to-settle-during-coding-fresh-eyes-review-2026-09-11--status-updated-with-owner-answers)
   - [6.7 Flexibility architecture (toolbox model)](#67-flexibility-architecture-owner-directive-2026-09-11) · [6.8 Independent review disposition](#68-independent-review--disposition-of-open-concerns-2026-09-11) · [6.9 WGS extensibility (not in MVP)](#69-wgs-extensibility--evaluated-2026-09-11-not-in-mvp-scope)
   - [6.10 Visual pipeline composition (not built)](#610-visual-pipeline-composition--per-node-branch-and-checkpoint-editing--raised-by-owner-2026-09-11-needs-study-not-scoped-or-built) · [6.11 Multi-page UI requirements (not built)](#611-multi-page-ui-requirements--brainstormed-2026-09-11-needs-study-not-scoped-or-built) · [6.12 UI technology & connection](#612-ui-technology--ui-to-backend-connection--researched-2026-09-11)
-  - [6.13 "Any node can be last" report-norms pass](#613-any-node-can-be-last-made-actually-true-and-a-real-report-norms-pass--owner-directive-2026-09-11) · [6.14 Resilience to lost connectivity](#614-resilience-to-lost-connectivity-and-multi-daysession-continuity--owner-directive-2026-09-12) · [6.15 Future composer QoL requirements](#615-quality-of-life-requirements-for-the-future-node-based-composer--brainstormed-2026-09-12-needs-study-not-scoped-or-built) · [6.16 Composer UI requirements + tool shortlist](#616-composer-ui-requirements-list--tool-shortlist--owner-directive-2026-09-13-needs-study-not-scoped-or-built)
+  - [6.13 "Any node can be last" report-norms pass](#613-any-node-can-be-last-made-actually-true-and-a-real-report-norms-pass--owner-directive-2026-09-11) · [6.14 Resilience to lost connectivity](#614-resilience-to-lost-connectivity-and-multi-daysession-continuity--owner-directive-2026-09-12) · [6.15 Future composer QoL requirements](#615-quality-of-life-requirements-for-the-future-node-based-composer--brainstormed-2026-09-12-needs-study-not-scoped-or-built) · [6.16 Composer UI requirements + tool shortlist + prototype](#616-composer-ui-requirements-list--tool-shortlist--owner-directive-2026-09-13-prototype-built-and-verified-same-day)
 - [7. Platform choice decision](#7-key-decision-platform-choice-owner-decision-required)
 - [8. References](#8-references-all-accessed-2026-09-11)
 - [9. Tool catalogue](#9-tool-catalogue--what-every-tool-does-and-why-it-matters-owner-requested-2026-09-11) — every tool wired, planned, or researched, with verified container tags
@@ -648,15 +648,42 @@ Same status as §6.10/§6.11: a requirements brainstorm, not a design or impleme
 
 **Not decided here:** exactly how "estimated timeline" should be computed (a static per-tool table vs. a real historical-runs database vs. something scaling with detected input size) - though item 1's timing split above at least settles *when* each kind of warning can honestly appear; what "the machine's headroom" means precisely when the pipeline might run on a different, more capable machine than the one composing it (dev laptop composing a pipeline meant for the AWS `test` environment or the `prod` VM - PLAN.md §1.1's environment model already treats these as genuinely different capacity tiers - now also the normal Windows EC2 VM per §7/§6.6's resolved deployment decision); and whether any of this needs new instrumentation beyond what Nextflow's trace file already provides.
 
-### 6.16 Composer UI requirements list + tool shortlist — owner directive, 2026-09-13, needs study, NOT scoped or built
+### 6.16 Composer UI requirements list + tool shortlist — owner directive, 2026-09-13; prototype built and verified same day
 
 **Owner's request, verbatim in shape:** a Figma-like node canvas, drag nodes from a categorized palette
 (visualization, classification, etc.) onto the canvas, each node clickable and hoverable, a navigation menu
 between different pages, and **French/English language switching called out as very important**. Asked
 explicitly for a requirements list first (Must-have / Nice-to-have / Don't-need), *then* to use it to find
-the right tool - not the other way around. This section is that requirements list, plus a tool shortlist
-that follows from it. **Still just research/requirements, same status as §6.10/§6.11 - not scoped, not
-started, not a decision to build yet.**
+the right tool - not the other way around, then ("go ahead and do further testing, then select an option and
+start coding. no need for my input") explicit authorization to pick from the shortlist and build a real
+prototype without further sign-off.
+
+**Status update, same day: a real, working prototype now exists at `composer-ui/`** (a separate React app -
+see its own `composer-ui/README.md` for the full detail, not duplicated here). Selected the already-shortlisted
+stack (React Flow / React Router v8 / react-i18next) and built a genuine vertical slice: the categorized
+draggable palette (real tool catalog mirroring `workflows/microbox.nf`, not invented examples), a working
+canvas (drag-drop node creation, click-to-select with a detail panel, hover tooltips, connectable edges),
+multi-page navigation (Composer + a placeholder History page), and live French/English switching covering
+every string including already-placed canvas nodes. **Verified for real, not just written**: manual browser
+testing via `claude-in-chrome` against the actual running dev server (drag-drop, click-select, live language
+switching, real client-side route navigation all separately confirmed working), a 13-test Vitest suite (i18n
+key-parity between locales, catalog-to-translation cross-checks, a real language-switch assertion, a real
+route-navigation assertion), a clean `tsc -b`, a clean `oxlint` pass, and a successful production build.
+
+**What this prototype deliberately does NOT do** (scoped intentionally, not an oversight - see
+`composer-ui/README.md` for the full list): no backend connection to actually run the pipeline (the FastAPI/
+`-with-weblog` piece from §6.12 is separate, unbuilt scope); no save/load of a pipeline configuration (§6.11's
+full export/import fidelity requirement); no type-compatibility enforcement between connected nodes (§6.10's
+confirmed requirement - any node can currently connect to any other node); the History page is a literal
+placeholder proving only that routing works, not a real feature.
+
+**This is still not the same thing as "the composer is scoped and being built as a product"** - it's a
+requirements-list-plus-verified-prototype pass, same spirit as every other item in this document marked
+"needs study." The remaining open questions from §6.10/§6.11 (does the canvas need to *generate* Nextflow
+wiring or just assemble a params file against the fixed pipeline shape; how "come back another day and edit
+step X" reconciles with Nextflow's immutable run-hashing; exact page inventory beyond Composer/History) are
+all still genuinely open - a working UI shell doesn't answer them, it just gives something concrete to answer
+them against.
 
 **Important context carried forward, not re-derived from scratch:** §6.12 (2026-09-11) already researched
 and confirmed **React Flow (`@xyflow/react`)** as the canvas library for exactly this "Figma-like node

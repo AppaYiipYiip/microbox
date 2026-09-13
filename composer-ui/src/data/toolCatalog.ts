@@ -88,6 +88,15 @@ export const TOOL_CATALOG: ToolDefinition[] = [
   },
   { id: 'maxbin2', category: 'binning', nameKey: 'tools.maxbin2.name', descriptionKey: 'tools.maxbin2.description' },
   { id: 'multiqc', category: 'reporting', nameKey: 'tools.multiqc.name', descriptionKey: 'tools.multiqc.description' },
+  // Pavian (bin/run-pavian.sh + docker-compose.yml) is a standalone
+  // interactive report viewer, deliberately NOT wired into
+  // workflows/microbox.nf as a DAG step (PLAN.md §6.6 item 2 - it only ever
+  // reads an existing run's results/kraken2 or results/bracken output, it
+  // doesn't process anything). Included here anyway per owner request
+  // 2026-09-13 ("i would love to see it in the pipeline") since this
+  // catalog's job is representing every real tool the project has, not
+  // strictly the Nextflow DAG - same "reporting" category as MultiQC.
+  { id: 'pavian', category: 'reporting', nameKey: 'tools.pavian.name', descriptionKey: 'tools.pavian.description' },
 ]
 
 export function toolsByCategory(): Record<ToolCategory, ToolDefinition[]> {

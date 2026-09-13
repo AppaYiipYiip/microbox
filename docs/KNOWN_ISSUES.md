@@ -12,6 +12,10 @@ gave every node a consistent default size instead of growing with content, and m
 React Flow's `NodeResizer` — test suite grew from 18 to 25, see "Composer canvas corrected to 4
 fixed-direction handles..." and "Node sizing/resize + a real connection-color bug..." below; a broader,
 not-yet-scoped "many quality of life elements" request was logged as Open #8 rather than guessed at.
+**Pavian added to the composer canvas's node palette** — the owner noticed it was missing from the composer
+even though it already existed as a standalone tool in the main pipeline; added to the "reporting" category
+alongside MultiQC, with an honest note that it's not a DAG step. See "Pavian added to the composer canvas's
+node palette..." below.
 **Composer UI quality-of-life pass** — asked the owner to prioritize an open-ended "many quality of life
 elements" request; built and verified the three picked: undo/redo (visible toolbar buttons + Ctrl/Cmd+Z/Y),
 multi-select with bulk move/delete, and Delete key + a duplicate-node button — a real testing-tool gotcha
@@ -437,5 +441,18 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   distinct DOM node ids); Delete removing a selected node and closing its now-stale detail panel; a genuine
   multi-selection (both nodes' `selected` class true in the DOM) confirmed draggable together and
   bulk-deletable as a single undo step (one Undo click restored both). Test suite grew from 25 to 31.
+
+- **Pavian added to the composer canvas's node palette, 2026-09-13** (owner: "i noticed that pavian is not
+  there yet.... add it! i would love to see it in the pipeline!"). Pavian (`bin/run-pavian.sh` +
+  `docker-compose.yml`, added earlier this project as a standalone report viewer - see "Pavian added"
+  above) was never in `composer-ui/src/data/toolCatalog.ts` because it's deliberately **not** a
+  `workflows/microbox.nf` DAG step (PLAN.md §6.6 item 2 - it only reads an existing run's
+  `results/kraken2`/`results/bracken` output, it processes nothing itself). Added anyway, in the same
+  "reporting" category as MultiQC, since the catalog's actual job is representing every real tool this
+  project has for the owner to place on a canvas, not strictly mirroring the Nextflow DAG one-for-one -
+  confirmed via `bin/run-pavian.sh`'s own header comment rather than assumed. Verified live in-browser:
+  Pavian appears under "Rapport"/"Reporting" with a real FR/EN-translated description and drops onto the
+  canvas as a normal 4-handle node like every other tool. Test suite unaffected (31/31 still pass, the
+  generic i18n-key-resolution test in `toolCatalog.test.ts` covers any newly added tool automatically).
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).

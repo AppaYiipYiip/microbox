@@ -68,6 +68,7 @@
       "params": { "checkv_db": "Chemin de la base de données CheckV" }
     },
     "maxbin2": { "name": "MaxBin2", "description": "Regroupe les contigs en bacs génomiques par organisme." },
-    "multiqc": { "name": "MultiQC", "description": "Agrège les résultats de tous les outils dans un seul rapport." }
+    "multiqc": { "name": "MultiQC", "description": "Agrège les résultats de tous les outils dans un seul rapport." },
+    "pavian": { "name": "Pavian", "description": "Visualiseur interactif pour explorer les rapports taxonomiques Kraken2/Bracken." }
   }
 }

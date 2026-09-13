@@ -23,7 +23,10 @@ actually clicking through it, not from re-reading the requirements:
   yet; Composer (`/composer`) — the canvas; Run History (`/history`) — a placeholder proving the route works.
 - A categorized, draggable node palette listing this pipeline's real tools (`src/data/toolCatalog.ts` mirrors
   `workflows/microbox.nf`'s actual stages — fastp, FastQC, Bowtie2, MEGAHIT, metaSPAdes, Kraken2, Bracken,
-  QUAST, geNomad, CheckV, MaxBin2, MultiQC — not invented examples).
+  QUAST, geNomad, CheckV, MaxBin2, MultiQC — not invented examples). Also includes **Pavian**
+  (`bin/run-pavian.sh`), even though it's a standalone report viewer deliberately NOT wired into the Nextflow
+  DAG (PLAN.md §6.6 item 2) — added 2026-09-13 at the owner's request ("i would love to see it in the
+  pipeline"), since this catalog's job is representing every real tool the project has, not strictly the DAG.
 - A React Flow canvas (`src/components/PipelineCanvas.tsx`, `colorMode="dark"`) — drag a tool from the
   palette, drop it on the canvas, connect nodes, click to select (a floating detail panel over the canvas,
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,

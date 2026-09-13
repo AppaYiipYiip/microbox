@@ -646,6 +646,20 @@ Same status as §6.10/§6.11: a requirements brainstorm, not a design or impleme
 6. **Export/import fidelity carrying this metadata too** - §6.11's existing export-format requirement (functional core + presentation layer, one file, fully reconstructable elsewhere) should eventually also carry each node's last-known resource/timeline stats forward, so re-opening an exported pipeline shows the same estimates without needing a fresh run first.
 7. **An in-app helper/guide for adding a tool or getting oriented - explicitly a "nice to have," not a requirement** (owner, 2026-09-12: "as a nice requirement we can have a build a plugin or add a tool to the app helper or web page to guide them or make it very easy. this is not a necessity just a nice to have"). Two different things this could mean, both worth keeping open rather than picking one prematurely: (a) an in-app wizard/onboarding flow inside the eventual composer UI itself - closest analogue already decided is Nielsen heuristic 10 in `docs/TESTING.md` §4.1 ("help and documentation"), which already flags the *current* thin UI has zero in-app help; a composer-era version of this would be a real guided flow, not just a help link; (b) a separate documentation site/portal (e.g. a static docs site built from `docs/`) rather than (or alongside) in-app help - lower engineering cost, easier to keep current, but doesn't help someone who's already inside the app and stuck. **What already exists that partially covers the underlying need, today, without waiting for the composer**: `CONTRIBUTING.md` (added 2026-09-12) is exactly this guidance in written form for the most common maintenance task ("how do I add a tool") - not in-app, not interactive, but real and current. Revisit this item once the composer (§6.10) is actually being scoped, since an in-app wizard only makes sense once there's an app-with-nodes to be guided through in the first place.
 
+8. **Edit-as-copy + rename, for both a run's pipeline and any saved pipeline** (owner, 2026-09-14, raised
+   while discussing Run History's planned mini pipeline-shape view): a pen/edit icon next to a past run (or any
+   saved pipeline configuration) should open it in the Composer as an independent, editable copy - the
+   original run's own config is never mutated in place, since a run's actual output already happened against
+   whatever it was configured with at the time and must stay a truthful record of that. Also needs a rename
+   capability - today a run only has its auto-generated `run_<timestamp>` id and a saved pipeline snapshot
+   (§6.11's Save/Import) has no name field at all, so there's currently nothing to even rename. Depends on
+   §6.11's export/import format gaining a name field (noted there as a gap: "no name/description metadata on a
+   saved pipeline") and, for runs specifically, on Run History having somewhere to persist a per-run display
+   name (today `RunSummary` is just `{ id, startedAt, hasReport }`, sourced from the run directory's name -
+   `serve-results-plugin.ts` - not a separate metadata store). Not scoped or built - recorded now so it isn't
+   lost before Run History's mini pipeline-shape view (also raised 2026-09-14, see the composer-ui README once
+   built) gets designed.
+
 **Not decided here:** exactly how "estimated timeline" should be computed (a static per-tool table vs. a real historical-runs database vs. something scaling with detected input size) - though item 1's timing split above at least settles *when* each kind of warning can honestly appear; what "the machine's headroom" means precisely when the pipeline might run on a different, more capable machine than the one composing it (dev laptop composing a pipeline meant for the AWS `test` environment or the `prod` VM - PLAN.md §1.1's environment model already treats these as genuinely different capacity tiers - now also the normal Windows EC2 VM per §7/§6.6's resolved deployment decision); and whether any of this needs new instrumentation beyond what Nextflow's trace file already provides.
 
 ### 6.16 Composer UI requirements list + tool shortlist — owner directive, 2026-09-13; prototype built and verified same day

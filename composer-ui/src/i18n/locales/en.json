@@ -2,8 +2,12 @@
   "nav": {
     "home": "Home",
     "composer": "Composer",
+    "run": "Run Pipeline",
     "history": "Run History",
     "brand": "microbox composer"
+  },
+  "runPipeline": {
+    "title": "Run Pipeline"
   },
   "home": {
     "title": "Home",

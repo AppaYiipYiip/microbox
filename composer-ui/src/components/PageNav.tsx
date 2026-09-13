@@ -12,6 +12,7 @@ import './PageNav.css'
 const PAGES = [
   { to: '/', key: 'nav.home', end: true },
   { to: '/composer', key: 'nav.composer', end: false },
+  { to: '/run', key: 'nav.run', end: false },
   { to: '/history', key: 'nav.history', end: false },
 ] as const
 

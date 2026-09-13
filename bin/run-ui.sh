@@ -57,13 +57,29 @@ fi
 # closing) still tries to deliver one some other way. Output redirected to
 # a log file since there's no terminal left to write to once detached;
 # stdin from /dev/null since nothing will ever be there to read from it.
+# --server.baseUrlPath: served under /run-app rather than at the root, so
+# composer-ui (a separate app, port 5173) can proxy it in as one of its own
+# pages ("Run Pipeline", next to Home/Composer/Run History) - owner
+# 2026-09-13: "composer and real pipeline should be in the localhost port,
+# just different page, just like the home and run history." Streamlit's own
+# documented way to sit behind a sub-path reverse proxy (docs.streamlit.io);
+# composer-ui/vite.config.ts's dev-server proxy is the other half, and must
+# use this exact same path. Still directly reachable on its own at
+# http://localhost:8501/run-app too, not just through the proxy.
+# --server.enableCORS=false --server.enableXsrfProtection=false: Streamlit's
+# own recommended pairing when running behind a reverse proxy that changes
+# the browser-visible origin (its default XSRF/CORS protection assumes it's
+# the direct origin) - no multi-user auth exists here anyway (PLAN.md §6.8
+# item 10), so this trades nothing away that mattered.
 setsid nohup "$STREAMLIT" run ui/app.py --server.address 127.0.0.1 --server.port 8501 \
+  --server.baseUrlPath run-app --server.enableCORS false --server.enableXsrfProtection false \
   > "$LOG_FILE" 2>&1 < /dev/null &
 PID=$!
 disown
 
 echo "Streamlit UI running (PID $PID), detached from this shell."
-echo "  URL:  http://localhost:8501"
+echo "  Direct URL:    http://localhost:8501/run-app"
+echo "  Via composer:  http://localhost:5173/run (when composer-ui's dev server is also running)"
 echo "  Logs: $LOG_FILE"
 echo ""
 echo "IMPORTANT (verified, not assumed - docs/KNOWN_ISSUES.md has the full"

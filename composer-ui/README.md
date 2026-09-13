@@ -1,11 +1,16 @@
 # composer-ui — pipeline composer prototype
 
-**Status: prototype/research artifact, not connected to the real pipeline.** Built 2026-09-13 to answer
-`docs/planning/PLAN.md` §6.16's requirements list with a real, working proof of concept — not a mockup, but
-also not yet wired to `bin/run.sh`/Nextflow execution (that's the FastAPI/`-with-weblog` backend described in
-§6.12, a separate, not-yet-built piece). This is a **separate React application** from the existing
-Streamlit thin launcher (`ui/`) — the two are unrelated and both currently exist; see `docs/planning/PLAN.md`
-§6.10 for why (Streamlit's server-rendered model is a poor fit for a Figma-like drag/connect canvas).
+**Status: the Composer itself is a prototype/research artifact - its own Run button is still disabled, and
+it does not generate or execute a real pipeline configuration** (that's the FastAPI/`-with-weblog` backend
+described in PLAN.md §6.12, a separate, not-yet-built piece). Built 2026-09-13 to answer
+`docs/planning/PLAN.md` §6.16's requirements list with a real, working proof of concept, not a mockup.
+Composer-ui is still a **separate React application** from the existing Streamlit thin launcher (`ui/`) - see
+`docs/planning/PLAN.md` §6.10 for why (Streamlit's server-rendered model is a poor fit for a Figma-like
+drag/connect canvas) - **but as of 2026-09-13 the two are no longer reached via separate ports**: this app's
+own dev server proxies the real Streamlit launcher in as its own "Run Pipeline" page
+(`src/pages/RunPipelinePage.tsx`, alongside Home/Composer/Run History in the same left nav), so
+`http://localhost:5173/run` is a real, working way to actually launch the pipeline - see "What's actually
+built" below and `docs/KNOWN_ISSUES.md`'s dated entry for exactly how.
 
 ## Layout, corrected 2026-09-13 after owner testing
 
@@ -19,8 +24,12 @@ actually clicking through it, not from re-reading the requirements:
 
 ## What's actually built and verified
 
-- **Three real pages**: Home (`/`) — a "currently running" section, honestly empty since there's no backend
-  yet; Composer (`/composer`) — the canvas; Run History (`/history`) — a placeholder proving the route works.
+- **Four real pages**: Home (`/`) — a "currently running" section, honestly empty since there's no backend
+  yet; Composer (`/composer`) — the canvas; **Run Pipeline** (`/run`) — added 2026-09-13, embeds the real,
+  separate Streamlit launcher (`ui/app.py`) via Vite's dev-server proxy (`/run-app` -> the Streamlit port,
+  `vite.config.ts`) so it's reachable on this same port/nav rather than a separate URL - this is the one page
+  that actually runs the pipeline, Composer's own Run button stays disabled; Run History (`/history`) — a
+  placeholder proving the route works.
 - A categorized, draggable node palette listing this pipeline's real tools (`src/data/toolCatalog.ts` mirrors
   `workflows/microbox.nf`'s actual stages — fastp, FastQC, Bowtie2, MEGAHIT, metaSPAdes, Kraken2, Bracken,
   QUAST, geNomad, CheckV, MaxBin2, MultiQC — not invented examples). Also includes **Pavian**
@@ -256,7 +265,7 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 84 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 86 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
@@ -299,15 +308,22 @@ npm run build    # production build to dist/
 npm run lint     # oxlint
 ```
 
+The `/run` page (the real pipeline launcher) needs the separate Streamlit process running too -
+`bash bin/run-ui.sh` from the repo root - since it's a proxied Python app, not something Vite serves on its
+own. Composer/Home/Run History work fine without it; `/run` will just show a proxy error until it's up.
+
 Needs Node.js 24 LTS (installed via NodeSource's apt repo — see `bin/setup-dev.sh` if that step gets added
 there later; not yet included since this is still a prototype, not part of the standard dev setup).
 
 ## What this deliberately does NOT do yet
 
-- **Does not run the pipeline.** There's no backend here at all — no FastAPI server, no `-with-weblog`
-  connection, no way to actually execute what's built on the canvas. The Run button reflects this honestly
-  (visible, disabled, with a tooltip) rather than pretending to work. That's real, separate, unbuilt scope
-  (`docs/planning/PLAN.md` §6.12).
+- **The Composer itself still does not run what's drawn on its canvas.** There's no FastAPI server or
+  `-with-weblog` connection translating a drawn graph into a real pipeline configuration - the Composer's own
+  Run button reflects this honestly (visible, disabled, with a tooltip) rather than pretending to work.
+  That's real, separate, unbuilt scope (`docs/planning/PLAN.md` §6.12). This is a different thing from the
+  separate **Run Pipeline** page (`/run`, added 2026-09-13) - that page genuinely runs the real pipeline
+  today, via the pre-existing Streamlit launcher embedded through a dev-server proxy, independent of anything
+  drawn in the Composer.
 - **Save/Import now cover §6.11's core fidelity requirement (position, size, params, enabled state, edge
   handles, real id-collision safety) but not everything the section describes.** No schema-version migration
   story (a v2 format would just be rejected outright by v1's parser, not translated forward); no name/

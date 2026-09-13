@@ -2,8 +2,12 @@
   "nav": {
     "home": "Accueil",
     "composer": "Compositeur",
+    "run": "Lancer le pipeline",
     "history": "Historique des analyses",
     "brand": "microbox compositeur"
+  },
+  "runPipeline": {
+    "title": "Lancer le pipeline"
   },
   "home": {
     "title": "Accueil",

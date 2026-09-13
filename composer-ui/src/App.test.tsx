@@ -36,6 +36,13 @@ describe('App routing', () => {
     expect(screen.getByRole('heading', { name: 'Run History' })).toBeInTheDocument()
   })
 
+  it('renders the Run Pipeline page at /run, embedding the real launcher via the dev-server proxy', () => {
+    renderApp('/run')
+    const frame = screen.getByTitle('Run Pipeline')
+    expect(frame.tagName).toBe('IFRAME')
+    expect(frame).toHaveAttribute('src', '/run-app')
+  })
+
   it('clicking Composer in the left page nav actually navigates there - a real route change', async () => {
     const user = userEvent.setup()
     renderApp('/')
@@ -54,5 +61,14 @@ describe('App routing', () => {
     await user.click(screen.getByRole('link', { name: 'Run History' }))
 
     expect(await screen.findByRole('heading', { name: 'Run History' })).toBeInTheDocument()
+  })
+
+  it('clicking Run Pipeline in the left page nav navigates there', async () => {
+    const user = userEvent.setup()
+    renderApp('/')
+
+    await user.click(screen.getByRole('link', { name: 'Run Pipeline' }))
+
+    expect(await screen.findByTitle('Run Pipeline')).toBeInTheDocument()
   })
 })

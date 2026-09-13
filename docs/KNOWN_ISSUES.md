@@ -4,7 +4,12 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**Composer canvas: the real-pipeline connection validation was removed entirely**
+Last updated: 2026-09-13 (**The composer and the real pipeline launcher now share one port** - Vite's dev
+server proxies `/run-app` through to the Streamlit launcher (`bin/run-ui.sh`, now started with
+`--server.baseUrlPath run-app`), and a new "Run Pipeline" nav page embeds it as an iframe, so
+`http://localhost:5173/run` is the real, functioning launcher - no more separate port/URL. Test suite: 84 →
+86. See "The composer and the real pipeline launcher now share one port..." below.
+**Composer canvas: the real-pipeline connection validation was removed entirely**
 after real use showed it couldn't reliably tell a genuine mistake apart from a forward-looking design based
 on an example diagram - "we allow the user to do whatever they want no need for warning." Auto-arrange
 changed from left-to-right to top-to-bottom to match the reference diagram's shape. Test suite: 93 → 84
@@ -940,3 +945,42 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   specific tool pairing matches the current pipeline, so it stayed. Test suite: 93 → 84 (9 removed, 0 added -
   a real feature removal, not a refactor). Verified live: re-drawing the exact FastQC → fastp connection from
   the owner's own saved canvas renders as a normal solid edge with no banner.
+
+- **The composer and the real pipeline launcher now share one port, 2026-09-13** (owner: "composer and real
+  pipeline should be in the localhost port, jsut different page, just like the home and run history"). Before
+  this, actually running the pipeline meant leaving the composer entirely for a separate app on a separate
+  port (`ui/app.py`, the Streamlit launcher, port 8501) - confusing, and the reason the owner needed a second
+  URL just to try a real run. Fixed by making Vite's own dev server proxy `/run-app` through to the Streamlit
+  process (`composer-ui/vite.config.ts`, `ws: true` - required, Streamlit's live updates run over a
+  WebSocket, not just plain HTTP), and adding a new "Run Pipeline" page (`src/pages/RunPipelinePage.tsx`) to
+  the same left-hand nav as Home/Composer/Run History, whose entire content is one full-bleed `<iframe
+  src="/run-app">`. `bin/run-ui.sh` now starts Streamlit with `--server.baseUrlPath run-app` (Streamlit's own
+  documented mechanism for sitting behind a reverse proxy on a sub-path - without it, Streamlit's own internal
+  asset/websocket requests resolve against the root and silently fail once proxied) plus
+  `--server.enableCORS false --server.enableXsrfProtection false` (Streamlit's own recommended pairing when a
+  proxy changes the browser-visible origin - no multi-user auth exists here to protect, PLAN.md §6.8 item 10,
+  so nothing real is traded away). Still directly reachable on its own unproxied port too
+  (`http://localhost:8501/run-app`), not just through the composer.
+  **Real, non-obvious bug hit getting this working, not assumed to just work**: launching `bin/run-ui.sh`
+  (or a raw `nextflow run ...`) via a single automated `wsl.exe -- bash -lc "..."` call - the same
+  setsid+nohup+disown pattern the script has used successfully since 2026-09-12 - died silently within a
+  fraction of a second, zero bytes ever written to its own log file, no process left behind. Root-caused by
+  testing the exact same command with an explicit few-second `sleep` added before the calling shell returns:
+  it then survived every time. The setsid+nohup+disown detachment itself was never broken - a *human* running
+  this script from a real interactive terminal always leaves it open for several seconds without thinking
+  about it, giving the backgrounded process time to actually finish initializing before anything could
+  disconnect; a single-shot automated call returns as fast as possible by design, disconnecting far sooner
+  than that. Not a bug in `bin/run-ui.sh` (unchanged for real interactive use) - purely a property of how an
+  automated one-shot call needs to invoke it, noted here so a future automated session doesn't waste time
+  re-diagnosing the same false lead (WSL2 VM teardown-on-last-client-disconnect, documented separately in
+  this same file, was the first suspect and was ruled out - other same-VM processes measurably survived the
+  identical gap).
+  **What this deliberately does NOT do**: proxy configuration is a Vite dev-server-only mechanism, not a
+  production one - PLAN.md §6.12 already flags the real UI-to-backend connection as separate, not-yet-built
+  scope, and a real deployment would need an actual reverse proxy (nginx or similar) doing the same job, not
+  this. New test coverage: `App.test.tsx` (2 new cases - the route renders the iframe with the correct `src`,
+  and clicking "Run Pipeline" in the nav navigates there), `PageNav.test.tsx` updated for 4 pages instead of
+  3. Test suite: 84 → 86. Verified live in-browser: `http://localhost:5173/run` shows the real Streamlit app
+  (not a static screenshot - the Environment dropdown genuinely opens and lists all 4 real environments,
+  confirming the proxied WebSocket connection is live), and `http://localhost:5173/composer` still works
+  unaffected.

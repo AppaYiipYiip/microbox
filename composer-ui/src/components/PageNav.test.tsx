@@ -16,10 +16,11 @@ function renderPageNav(initialPath = '/') {
 }
 
 describe('PageNav', () => {
-  it('renders links for all three pages: Home, Composer, Run History', () => {
+  it('renders links for all four pages: Home, Composer, Run Pipeline, Run History', () => {
     renderPageNav()
     expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Composer' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Run Pipeline' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Run History' })).toBeInTheDocument()
   })
 

@@ -4,6 +4,25 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
+Last updated: 2026-09-14 (**Composer canvas: export as PNG image** - a new "Download Image"
+toolbar button (`ComposerPage.tsx`, disabled on an empty canvas like Save/Run) uses `html-to-image`'s `toPng()`
+against the `.react-flow__viewport` DOM node, framed with React Flow's own `getNodesBounds`/
+`getViewportForBounds` helpers per their documented export pattern (reactflow.dev/examples/misc/download-image)
+so the exported picture matches what's on screen regardless of current pan/zoom. Test suite: 94 → 95. See
+"Composer canvas: export as PNG image" below.
+
+**Composer canvas: export as PNG image** — owner: "as for the composer, we should have an option to download
+it as image." Added a "Download Image" toolbar button (disabled on an empty canvas, same pattern as Save/Run)
+using the `html-to-image` package's `toPng()` against the live `.react-flow__viewport` DOM node, framed via
+React Flow's own `getNodesBounds`/`getViewportForBounds` helpers — the same approach React Flow's own docs
+recommend (reactflow.dev/examples/misc/download-image), so it captures exactly what's drawn (node positions,
+colors, badges) rather than re-rendering a separate representation. Verified two ways: a real button click in
+the live browser produced a correctly-named `microbox-pipeline-<timestamp>.png` download, and a direct
+`toPng()` call against the live page returned valid PNG image data. (One browser-automation-tool quirk hit
+along the way: this session's known click/drag flakiness recurred — a synthetic click via the automation
+tool's element-reference targeting didn't register, while a real DOM `MouseEvent` dispatch did; not an app
+bug, so not chased further.) Test suite: 94 → 95.
+
 Last updated: 2026-09-13 (**Run History is now a real list of every retained run - view/export/delete each
 one** - each run launched from the Run Pipeline page gets its own timestamped `results/run_<timestamp>/`
 output directory now (`bin/run.sh`'s new `--outdir` flag, `ui/app.py`), instead of every run overwriting the

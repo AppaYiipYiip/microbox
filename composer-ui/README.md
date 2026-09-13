@@ -240,6 +240,13 @@ actually clicking through it, not from re-reading the requirements:
   claim is accurate for the data, the separate rendering gap is now fixed and verified too.)
 - **Save/Run buttons** — Run is visible but genuinely disabled, with a tooltip explaining why - there's no
   backend to run anything against yet; a disabled button with an honest reason beats a missing one.
+- **Download Image** (owner, 2026-09-13: "as for the composer, we should have an option to download it as
+  image") — a toolbar button next to Save, disabled on an empty canvas the same way. Uses the `html-to-image`
+  package's `toPng()` against the live `.react-flow__viewport` DOM node, framed with React Flow's own
+  `getNodesBounds`/`getViewportForBounds` helpers (the pattern React Flow's own docs recommend for this
+  exact use case) so the PNG matches whatever is actually drawn - node colors, badges, connections - not a
+  separately-rendered approximation, regardless of the canvas's current pan/zoom. Verified live: clicking the
+  button with two real nodes on the canvas produced a `microbox-pipeline-<timestamp>.png` download.
 - Live French/English switching (`src/i18n/`, react-i18next) — every piece of UI chrome, every node
   label/description, and now the Save/Run button labels are translated, verified live to actually re-render
   when the toggle is clicked, including already-placed canvas nodes.
@@ -272,7 +279,7 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 94 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 95 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4

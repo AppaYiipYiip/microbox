@@ -26,6 +26,8 @@
     "clearSelection": "Close",
     "save": "Save",
     "saveHint": "Downloads a JSON snapshot of the current canvas (nodes, connections, positions, parameters).",
+    "downloadImage": "Download Image",
+    "downloadImageHint": "Downloads a PNG picture of the current canvas, exactly as drawn.",
     "run": "Run",
     "runDisabledHint": "Not connected to the pipeline yet - this button is a placeholder.",
     "noParams": "No configurable parameters for this tool yet.",

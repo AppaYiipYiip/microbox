@@ -47,9 +47,13 @@ function renderComposerPage() {
 // (src/utils/updateNodeParam.test.ts); the actual click interactions are
 // verified via real browser testing (composer-ui/README.md).
 describe('ComposerPage', () => {
-  it('renders the toolbar (Save, Run) and the tool palette', () => {
+  it('renders the toolbar (Save, Download Image, Run) and the tool palette', () => {
     renderComposerPage()
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    // Disabled on an empty canvas - nothing to render into an image yet,
+    // same "disabled with an honest reason" pattern as Run - owner
+    // 2026-09-13: "we should have an option to download it as image."
+    expect(screen.getByRole('button', { name: 'Download Image' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled()
     expect(screen.getByText('Tools')).toBeInTheDocument()
   })
@@ -58,5 +62,12 @@ describe('ComposerPage', () => {
     renderComposerPage()
     dropToolOnCanvas('fastp')
     expect(await screen.findByText('fastp')).toBeInTheDocument()
+  })
+
+  it('enables Download Image once the canvas has at least one node', async () => {
+    renderComposerPage()
+    dropToolOnCanvas('fastp')
+    await screen.findByText('fastp')
+    expect(screen.getByRole('button', { name: 'Download Image' })).toBeEnabled()
   })
 })

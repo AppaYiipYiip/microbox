@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, type Connection, type Edge } from '@xyflow/react'
+import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, getNodesBounds, getViewportForBounds, type Connection, type Edge } from '@xyflow/react'
+import { toPng } from 'html-to-image'
 import { NodePalette } from '../components/NodePalette'
 import { PipelineCanvas } from '../components/PipelineCanvas'
 import { TOOL_CATALOG } from '../data/toolCatalog'
@@ -59,6 +60,50 @@ function downloadCanvasSnapshot(nodes: ToolNodeType[], edges: Edge[]) {
   a.download = `microbox-pipeline-${Date.now()}.json`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// Downloads the canvas as a real PNG - owner 2026-09-13: "we should have an
+// option to download it as image." Uses React Flow's own documented pattern
+// for this exact feature (reactflow.dev/examples/misc/download-image):
+// getNodesBounds/getViewportForBounds compute a viewport that fits every
+// node (not just whatever's currently visible/panned-to on screen), and
+// html-to-image's toPng renders the real `.react-flow__viewport` DOM node
+// (actual node content and edges, not a redrawn approximation) into that
+// framing. A generous 100px margin on each side keeps a node's own border
+// from getting cropped flush against the image edge.
+function downloadCanvasImage(nodes: ToolNodeType[]) {
+  const viewportEl = document.querySelector<HTMLElement>('.react-flow__viewport')
+  if (!viewportEl || nodes.length === 0) return
+
+  const bounds = getNodesBounds(nodes)
+  const imageWidth = Math.round(bounds.width) + 200
+  const imageHeight = Math.round(bounds.height) + 200
+  const viewport = getViewportForBounds(bounds, imageWidth, imageHeight, 0.1, 2, 0.1)
+
+  toPng(viewportEl, {
+    backgroundColor: '#141414',
+    width: imageWidth,
+    height: imageHeight,
+    style: {
+      width: `${imageWidth}px`,
+      height: `${imageHeight}px`,
+      transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+    },
+  })
+    .then((dataUrl) => {
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `microbox-pipeline-${Date.now()}.png`
+      a.click()
+    })
+    .catch((error: unknown) => {
+      // Deliberately no user-facing error beyond this - a failed image
+      // export (an unsupported CSS feature in some node's rendering, a
+      // browser quirk) isn't destructive like a failed Save/Import would
+      // be; the canvas itself is completely unaffected either way. Still
+      // logged, not swallowed outright, in case it needs debugging later.
+      console.error('Composer image export failed', error)
+    })
 }
 
 function ComposerInner() {
@@ -414,6 +459,15 @@ function ComposerInner() {
             onClick={() => downloadCanvasSnapshot(nodes, edges)}
           >
             {t('composer.save')}
+          </button>
+          <button
+            type="button"
+            className="composer-page__btn"
+            title={t('composer.downloadImageHint')}
+            disabled={nodes.length === 0}
+            onClick={() => downloadCanvasImage(nodes)}
+          >
+            {t('composer.downloadImage')}
           </button>
           <button type="button" className="composer-page__btn" title={t('composer.importHint')} onClick={handleImportClick}>
             {t('composer.import')}

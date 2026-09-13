@@ -26,6 +26,8 @@
     "clearSelection": "Fermer",
     "save": "Enregistrer",
     "saveHint": "Télécharge un instantané JSON de la zone de travail actuelle (nœuds, connexions, positions, paramètres).",
+    "downloadImage": "Télécharger l'image",
+    "downloadImageHint": "Télécharge une image PNG de la zone de travail actuelle, telle que dessinée.",
     "run": "Lancer",
     "runDisabledHint": "Pas encore connecté au pipeline - ce bouton est un espace réservé.",
     "noParams": "Aucun paramètre configurable pour cet outil pour le moment.",

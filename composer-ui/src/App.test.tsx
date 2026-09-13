@@ -21,8 +21,13 @@ describe('App routing', () => {
     void i18n.changeLanguage('en')
   })
 
-  it('renders the Composer page at /', () => {
+  it('renders the Home page at /', () => {
     renderApp('/')
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument()
+  })
+
+  it('renders the Composer page at /composer', () => {
+    renderApp('/composer')
     expect(screen.getByRole('heading', { name: 'Pipeline Composer' })).toBeInTheDocument()
   })
 
@@ -31,14 +36,23 @@ describe('App routing', () => {
     expect(screen.getByRole('heading', { name: 'Run History' })).toBeInTheDocument()
   })
 
-  it('clicking the Run History nav link actually navigates there - a real route change, not just a second component', async () => {
+  it('clicking Composer in the left page nav actually navigates there - a real route change', async () => {
     const user = userEvent.setup()
     renderApp('/')
-    expect(screen.getByRole('heading', { name: 'Pipeline Composer' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('link', { name: 'Composer' }))
+
+    expect(await screen.findByRole('heading', { name: 'Pipeline Composer' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Home' })).not.toBeInTheDocument()
+  })
+
+  it('clicking Run History in the left page nav navigates there', async () => {
+    const user = userEvent.setup()
+    renderApp('/')
 
     await user.click(screen.getByRole('link', { name: 'Run History' }))
 
     expect(await screen.findByRole('heading', { name: 'Run History' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Pipeline Composer' })).not.toBeInTheDocument()
   })
 })

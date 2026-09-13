@@ -1,15 +1,26 @@
 {
   "nav": {
+    "home": "Home",
     "composer": "Composer",
     "history": "Run History",
     "brand": "microbox composer"
+  },
+  "home": {
+    "title": "Home",
+    "currentRunsTitle": "Currently running",
+    "currentRunsEmpty": "Nothing is running right now.",
+    "placeholder": "This page is a placeholder - it is not yet connected to real pipeline runs (PLAN.md §6.16 is requirements/prototype only)."
   },
   "composer": {
     "title": "Pipeline Composer",
     "paletteTitle": "Tools",
     "canvasEmptyHint": "Drag a tool from the palette onto the canvas to add it to your pipeline.",
     "nodeSelected": "Selected node",
-    "clearSelection": "Close"
+    "clearSelection": "Close",
+    "save": "Save",
+    "saveHint": "Downloads a JSON snapshot of the current canvas (nodes, connections, positions).",
+    "run": "Run",
+    "runDisabledHint": "Not connected to the pipeline yet - this button is a placeholder."
   },
   "history": {
     "title": "Run History",

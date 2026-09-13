@@ -1,15 +1,26 @@
 {
   "nav": {
+    "home": "Accueil",
     "composer": "Compositeur",
     "history": "Historique des analyses",
     "brand": "microbox compositeur"
+  },
+  "home": {
+    "title": "Accueil",
+    "currentRunsTitle": "En cours d'exécution",
+    "currentRunsEmpty": "Rien n'est en cours d'exécution actuellement.",
+    "placeholder": "Cette page est un espace réservé - elle n'est pas encore connectée aux analyses réelles du pipeline (PLAN.md §6.16 est uniquement au stade des exigences et du prototype)."
   },
   "composer": {
     "title": "Compositeur de pipeline",
     "paletteTitle": "Outils",
     "canvasEmptyHint": "Glissez un outil depuis la palette vers la zone de travail pour l'ajouter à votre pipeline.",
     "nodeSelected": "Nœud sélectionné",
-    "clearSelection": "Fermer"
+    "clearSelection": "Fermer",
+    "save": "Enregistrer",
+    "saveHint": "Télécharge un instantané JSON de la zone de travail actuelle (nœuds, connexions, positions).",
+    "run": "Lancer",
+    "runDisabledHint": "Pas encore connecté au pipeline - ce bouton est un espace réservé."
   },
   "history": {
     "title": "Historique des analyses",

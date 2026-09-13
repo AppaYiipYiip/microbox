@@ -1,0 +1,29 @@
+.page-nav {
+  width: 180px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 0.75rem;
+  background: #161616;
+  border-right: 1px solid #2a2a2a;
+}
+
+.page-nav__link {
+  color: #aaa;
+  text-decoration: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.page-nav__link:hover {
+  color: #fff;
+  background: #262626;
+}
+
+.page-nav__link--active {
+  color: #fff;
+  background: #2f3b5c;
+  font-weight: 600;
+}

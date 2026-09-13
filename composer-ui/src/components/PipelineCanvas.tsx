@@ -1,15 +1,13 @@
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import {
   ReactFlow,
-  ReactFlowProvider,
   Background,
   Controls,
-  addEdge,
-  useNodesState,
-  useEdgesState,
   useReactFlow,
   type Connection,
   type Edge,
+  type OnNodesChange,
+  type OnEdgesChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useTranslation } from 'react-i18next'
@@ -29,17 +27,28 @@ function nextNodeId() {
 // to rebuild internal caches unnecessarily).
 const NODE_TYPES = { tool: ToolNode }
 
-function CanvasInner({ onSelectNode }: { onSelectNode: (toolId: string | null) => void }) {
+// Controlled component - the parent (ComposerPage) owns nodes/edges state
+// (via useNodesState/useEdgesState) so its Save/Run toolbar can read the
+// current canvas contents directly, rather than this component being the
+// only place that state lives. Must be rendered inside a ReactFlowProvider
+// by the parent (needs useReactFlow for screenToFlowPosition).
+export function PipelineCanvas({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  onSelectNode,
+}: {
+  nodes: ToolNodeType[]
+  edges: Edge[]
+  onNodesChange: OnNodesChange<ToolNodeType>
+  onEdgesChange: OnEdgesChange<Edge>
+  onConnect: (connection: Connection) => void
+  onSelectNode: (toolId: string | null) => void
+}) {
   const { t } = useTranslation()
-  const wrapperRef = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition } = useReactFlow()
-  const [nodes, setNodes, onNodesChange] = useNodesState<ToolNodeType>([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-
-  const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
-    [setEdges],
-  )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
@@ -59,22 +68,20 @@ function CanvasInner({ onSelectNode }: { onSelectNode: (toolId: string | null) =
         position,
         data: { toolId },
       }
-      setNodes((nds) => nds.concat(newNode))
+      onNodesChange([{ type: 'add', item: newNode }])
     },
-    [screenToFlowPosition, setNodes],
+    [screenToFlowPosition, onNodesChange],
   )
 
   const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: ToolNodeType) => {
-      onSelectNode(node.data.toolId)
-    },
+    (_event: React.MouseEvent, node: ToolNodeType) => onSelectNode(node.data.toolId),
     [onSelectNode],
   )
 
   const onPaneClick = useCallback(() => onSelectNode(null), [onSelectNode])
 
   return (
-    <div className="pipeline-canvas" ref={wrapperRef}>
+    <div className="pipeline-canvas">
       {nodes.length === 0 && <div className="pipeline-canvas__empty-hint">{t('composer.canvasEmptyHint')}</div>}
       <ReactFlow
         nodes={nodes}
@@ -87,23 +94,12 @@ function CanvasInner({ onSelectNode }: { onSelectNode: (toolId: string | null) =
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        colorMode="dark"
         fitView
       >
         <Background />
         <Controls />
       </ReactFlow>
     </div>
-  )
-}
-
-// Wrapped in its own ReactFlowProvider so useReactFlow (needed for
-// screenToFlowPosition - converting a raw browser drop coordinate into the
-// canvas's own pan/zoom-aware coordinate space) is available - required by
-// React Flow's own drag-and-drop example, not an arbitrary choice.
-export function PipelineCanvas({ onSelectNode }: { onSelectNode: (toolId: string | null) => void }) {
-  return (
-    <ReactFlowProvider>
-      <CanvasInner onSelectNode={onSelectNode} />
-    </ReactFlowProvider>
   )
 }

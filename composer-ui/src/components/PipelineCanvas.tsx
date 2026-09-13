@@ -8,6 +8,8 @@ import {
   type Edge,
   type OnNodesChange,
   type OnEdgesChange,
+  type OnBeforeDelete,
+  type SelectionDragHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useTranslation } from 'react-i18next'
@@ -16,13 +18,13 @@ import { DeletableEdge } from './DeletableEdge'
 import { DRAG_DATA_FORMAT } from './NodePalette'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import { isValidConnection } from '../utils/isValidConnection'
+import { nextNodeId } from '../utils/nodeId'
 import './PipelineCanvas.css'
 
-let nodeIdCounter = 0
-function nextNodeId() {
-  nodeIdCounter += 1
-  return `node-${nodeIdCounter}`
-}
+// Accepts both keys so Delete works on Windows and Backspace works on macOS
+// (React Flow's own default is 'Backspace' only) - owner feedback 2026-09-13
+// asked for a "delete key" without specifying which.
+const DELETE_KEY_CODE = ['Backspace', 'Delete']
 
 // All nodes start at this same size regardless of tool name/category length
 // (owner feedback 2026-09-13: "the nodes should all have the same size by
@@ -52,6 +54,11 @@ export function PipelineCanvas({
   onEdgesChange,
   onConnect,
   onSelectNode,
+  onBeforeDelete,
+  onNodesDelete,
+  onNodeDragStart,
+  onSelectionDragStart,
+  onBeforeAddNode,
 }: {
   nodes: ToolNodeType[]
   edges: Edge[]
@@ -59,6 +66,19 @@ export function PipelineCanvas({
   onEdgesChange: OnEdgesChange<Edge>
   onConnect: (connection: Connection) => void
   onSelectNode: (nodeId: string | null) => void
+  // Undo/redo hooks (owner feedback 2026-09-13: "many quality of life
+  // elements") - each fires right BEFORE its corresponding mutation is
+  // applied, so ComposerPage can snapshot pre-change state for its history
+  // stack. Delete goes through `onBeforeDelete` specifically (not just a
+  // 'remove' NodeChange/EdgeChange) since it's the one hook React Flow
+  // guarantees runs before the removal is committed to state.
+  onBeforeDelete: OnBeforeDelete<ToolNodeType, Edge>
+  onNodesDelete: (deleted: ToolNodeType[]) => void
+  onNodeDragStart: () => void
+  onSelectionDragStart: SelectionDragHandler<ToolNodeType>
+  // Fired right before a palette drop adds a new node - the fourth history
+  // entry point alongside onConnect/onBeforeDelete/onNodeDragStart above.
+  onBeforeAddNode: () => void
 }) {
   const { t } = useTranslation()
   const { screenToFlowPosition } = useReactFlow()
@@ -83,9 +103,10 @@ export function PipelineCanvas({
         height: DEFAULT_NODE_HEIGHT,
         data: { toolId, params: {} },
       }
+      onBeforeAddNode()
       onNodesChange([{ type: 'add', item: newNode }])
     },
-    [screenToFlowPosition, onNodesChange],
+    [screenToFlowPosition, onNodesChange, onBeforeAddNode],
   )
 
   const onNodeClick = useCallback(
@@ -112,6 +133,11 @@ export function PipelineCanvas({
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onBeforeDelete={onBeforeDelete}
+        onNodesDelete={onNodesDelete}
+        onNodeDragStart={onNodeDragStart}
+        onSelectionDragStart={onSelectionDragStart}
+        deleteKeyCode={DELETE_KEY_CODE}
         colorMode="dark"
         fitView
       >

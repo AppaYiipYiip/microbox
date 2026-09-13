@@ -22,7 +22,10 @@
     "run": "Lancer",
     "runDisabledHint": "Pas encore connecté au pipeline - ce bouton est un espace réservé.",
     "noParams": "Aucun paramètre configurable pour cet outil pour le moment.",
-    "deleteConnection": "Supprimer la connexion"
+    "deleteConnection": "Supprimer la connexion",
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "duplicate": "Dupliquer"
   },
   "history": {
     "title": "Historique des analyses",

@@ -78,10 +78,15 @@
   z-index: 5;
 }
 
+.composer-page__detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.composer-page__detail-duplicate,
 .composer-page__detail-close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
   background: transparent;
   border: 1px solid #444;
   color: #aaa;
@@ -91,6 +96,7 @@
   cursor: pointer;
 }
 
+.composer-page__detail-duplicate:hover,
 .composer-page__detail-close:hover {
   color: #fff;
   border-color: #666;

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, type Connection, type Edge } from '@xyflow/react'
 import { NodePalette } from '../components/NodePalette'
@@ -6,6 +6,8 @@ import { PipelineCanvas } from '../components/PipelineCanvas'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import type { ToolNodeType } from '../components/ToolNode'
 import { updateNodeParam as mergeNodeParam } from '../utils/updateNodeParam'
+import { nextNodeId } from '../utils/nodeId'
+import { EMPTY_HISTORY, pushSnapshot, undo as undoHistory, redo as redoHistory } from '../utils/history'
 import './ComposerPage.css'
 
 // Downloads a JSON snapshot of the canvas (nodes: id/type/position/data -
@@ -45,14 +47,82 @@ function ComposerInner() {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
   const selectedTool = selectedNode ? TOOL_CATALOG.find((tool) => tool.id === selectedNode.data.toolId) : null
 
+  // Undo/redo (owner feedback 2026-09-13: "many quality of life elements").
+  // A snapshot is the canvas state right BEFORE the mutation about to be
+  // applied - taken explicitly at each user-initiated structural edit (add
+  // node, delete, duplicate, connect, drag-start) rather than on every low-
+  // level onNodesChange/onEdgesChange call, which would otherwise push a
+  // new history entry per pixel of a drag. Deliberately does NOT cover
+  // in-progress param edits or node resizing yet - narrower scope than "undo
+  // literally everything," documented in composer-ui/README.md.
+  const [history, setHistory] = useState(EMPTY_HISTORY)
+  const takeSnapshot = useCallback(() => setHistory((h) => pushSnapshot(h, { nodes, edges })), [nodes, edges])
+
+  const handleUndo = useCallback(() => {
+    const result = undoHistory(history, { nodes, edges })
+    if (!result) return
+    setHistory(result.history)
+    setNodes(result.snapshot.nodes)
+    setEdges(result.snapshot.edges)
+    setSelectedNodeId(null)
+  }, [history, nodes, edges, setNodes, setEdges])
+
+  const handleRedo = useCallback(() => {
+    const result = redoHistory(history, { nodes, edges })
+    if (!result) return
+    setHistory(result.history)
+    setNodes(result.snapshot.nodes)
+    setEdges(result.snapshot.edges)
+    setSelectedNodeId(null)
+  }, [history, nodes, edges, setNodes, setEdges])
+
+  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y to redo - skipped
+  // while focus is inside a text field so the browser's own native text-undo
+  // still works for in-progress param edits.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target
+      const isEditableTarget = target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if (isEditableTarget || !(event.metaKey || event.ctrlKey)) return
+      const key = event.key.toLowerCase()
+      if (key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        handleUndo()
+      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+        event.preventDefault()
+        handleRedo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleUndo, handleRedo])
+
   // New edges are explicitly typed 'deletable' (DeletableEdge, the X-on-
   // click component) rather than relying on ReactFlow's defaultEdgeOptions
   // prop to apply automatically through this custom onConnect handler -
   // addEdge() is a plain utility function and doesn't know about that prop
   // on its own, so it's set here directly to be certain, not assumed.
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge({ ...connection, type: 'deletable' }, eds)),
-    [setEdges],
+    (connection: Connection) => {
+      takeSnapshot()
+      setEdges((eds) => addEdge({ ...connection, type: 'deletable' }, eds))
+    },
+    [takeSnapshot, setEdges],
+  )
+
+  // onBeforeDelete is the one React Flow hook guaranteed to run before a
+  // Delete/Backspace-key or edge-"x" removal is actually applied to state -
+  // used here purely to snapshot; always allows the deletion through.
+  const handleBeforeDelete = useCallback(async () => {
+    takeSnapshot()
+    return true
+  }, [takeSnapshot])
+
+  const handleNodesDelete = useCallback(
+    (deleted: ToolNodeType[]) => {
+      if (deleted.some((n) => n.id === selectedNodeId)) setSelectedNodeId(null)
+    },
+    [selectedNodeId],
   )
 
   const updateNodeParam = useCallback(
@@ -60,11 +130,38 @@ function ComposerInner() {
     [setNodes],
   )
 
+  // Duplicates the selected node's tool + params (not its connections - a
+  // copy that inherited its source's edges would silently create a second
+  // pipeline branch the user didn't ask for). Offset so the copy doesn't
+  // land exactly on top of the original and is immediately draggable apart.
+  const duplicateNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId)
+      if (!node) return
+      takeSnapshot()
+      const newNode: ToolNodeType = {
+        ...node,
+        id: nextNodeId(),
+        position: { x: node.position.x + 24, y: node.position.y + 24 },
+        selected: false,
+      }
+      setNodes((nds) => [...nds, newNode])
+      setSelectedNodeId(newNode.id)
+    },
+    [nodes, takeSnapshot, setNodes],
+  )
+
   return (
     <div className="composer-page">
       <div className="composer-page__toolbar">
         <h1 className="composer-page__title">{t('composer.title')}</h1>
         <div className="composer-page__actions">
+          <button type="button" className="composer-page__btn" title="Ctrl+Z" disabled={history.past.length === 0} onClick={handleUndo}>
+            {t('composer.undo')}
+          </button>
+          <button type="button" className="composer-page__btn" title="Ctrl+Shift+Z" disabled={history.future.length === 0} onClick={handleRedo}>
+            {t('composer.redo')}
+          </button>
           <button
             type="button"
             className="composer-page__btn"
@@ -92,12 +189,22 @@ function ComposerInner() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onSelectNode={setSelectedNodeId}
+            onBeforeDelete={handleBeforeDelete}
+            onNodesDelete={handleNodesDelete}
+            onNodeDragStart={takeSnapshot}
+            onSelectionDragStart={takeSnapshot}
+            onBeforeAddNode={takeSnapshot}
           />
           {selectedNode && selectedTool && (
             <aside className="composer-page__detail" aria-label={t('composer.nodeSelected')}>
-              <button type="button" className="composer-page__detail-close" onClick={() => setSelectedNodeId(null)}>
-                {t('composer.clearSelection')}
-              </button>
+              <div className="composer-page__detail-actions">
+                <button type="button" className="composer-page__detail-duplicate" onClick={() => duplicateNode(selectedNode.id)}>
+                  {t('composer.duplicate')}
+                </button>
+                <button type="button" className="composer-page__detail-close" onClick={() => setSelectedNodeId(null)}>
+                  {t('composer.clearSelection')}
+                </button>
+              </div>
               <h3>{t(selectedTool.nameKey)}</h3>
               <p>{t(selectedTool.descriptionKey)}</p>
               {selectedTool.params && selectedTool.params.length > 0 ? (

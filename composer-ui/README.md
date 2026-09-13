@@ -57,6 +57,26 @@ actually clicking through it, not from re-reading the requirements:
 - **Nodes are resizable** — selecting a node reveals React Flow's `NodeResizer` handles (min 120×56px);
   dragging them resizes just that node, persisted the same way a position drag is (through the normal
   `onNodesChange` stream onto `node.width`/`node.height`). Verified live in-browser.
+- **Undo/redo, multi-select + bulk move/delete, Delete key + duplicate** (owner feedback 2026-09-13: "many
+  quality of life elements when it comes to the ui" - these three were the ones picked when asked to
+  prioritize). `Ctrl/Cmd+Z` to undo, `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` to redo (also visible Undo/Redo
+  toolbar buttons, disabled when there's nothing to undo/redo - a visible affordance, not keyboard-only, per
+  this project's own established lesson that hidden-until-you-know controls get missed). The undo stack
+  (`src/utils/history.ts`, a plain past/future array pair, unit-tested) covers node add (palette drop), node
+  delete (Delete/Backspace or an edge's "×"), duplicate, connect, and node/selection drag - each snapshotted
+  right before its mutation is applied. Deliberately does **not** yet cover in-progress param edits or node
+  resizing (documented scope cut, not an oversight). Multi-select uses React Flow's own defaults - Ctrl/Cmd
+  click to add a node to the selection, Shift-drag an empty area for a box-select - and both bulk move
+  (dragging any selected node moves the whole selection) and bulk delete (Delete/Backspace removes every
+  selected node/edge, snapshotted as a single undo step) came free from that, no new code needed beyond
+  wiring `deleteKeyCode={['Backspace', 'Delete']}` (React Flow's own default is Backspace only). A node
+  detail-panel "Duplicate" button clones the selected node's tool + params (not its connections) at a small
+  position offset. **Real testing-tool gotcha found verifying this, not an app bug**: simulating "Ctrl+click"
+  by setting a modifier flag on a single synthetic click event does not trigger React Flow's multi-select -
+  it tracks the modifier key via its own real `keydown`/`keyup` listener on `window`
+  (`multiSelectionActive`/`useKeyPress`), which a single click's `ctrlKey` flag never fires. Confirmed
+  multi-select genuinely works by dispatching real `keydown`/`keyup` events around the clicks instead - a
+  real user physically holding Ctrl hits the real listener, this only affects automated click simulation.
 - **Save and Run buttons** on the Composer toolbar. Save genuinely works client-side today — downloads a
   JSON snapshot of the canvas (node ids/types/positions/data including params, edge connections) via a
   `Blob` + `<a download>`. This is a real step toward §6.11's full export/import fidelity requirement, not
@@ -79,14 +99,22 @@ actually clicking through it, not from re-reading the requirements:
   in the DOM (multi-edge-per-handle), a selected edge's "×" button confirmed to actually remove just that
   edge, real parameter editing (typing into a Kraken2 node's DB-path field and having it retained), two nodes
   with very different label lengths rendering at the identical default size with ellipsis truncation, a node
-  resize confirmed to persist after dragging its `NodeResizer` handle, and the target/source handle colors
-  confirmed (via computed style) to survive React Flow's own `connectingfrom`/`connectionindicator` states.
-- `npm test` (Vitest + React Testing Library, 25 tests) — i18n key-structure parity between `en.json`/
+  resize confirmed to persist after dragging its `NodeResizer` handle, the target/source handle colors
+  confirmed (via computed style) to survive React Flow's own `connectingfrom`/`connectionindicator` states,
+  Undo/Redo toolbar buttons confirmed to enable/disable correctly and to genuinely add/remove nodes on click,
+  the Duplicate button confirmed to create a real independent second node, Delete/Backspace confirmed to
+  remove a selected node and close its now-stale detail panel, real multi-select (Ctrl+click, using actual
+  dispatched `keydown`/`keyup` events - see the testing-tool gotcha noted above) confirmed via the DOM to
+  select both nodes, a drag of one multi-selected node confirmed to move the whole selection together, and
+  Delete confirmed to remove an entire multi-selection as a single undo step.
+- `npm test` (Vitest + React Testing Library, 31 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
-  handles with the correct fixed target/source roles, self-connection rejected by `isValidConnection`, and
-  the param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings.
+  handles with the correct fixed target/source roles, self-connection rejected by `isValidConnection`, the
+  param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings, and
+  the undo/redo stack (`src/utils/history.ts`) round-trips correctly, discards redo on a new change, and caps
+  its length.
 - `npm run build` — a real production build succeeds.
 - `npx tsc --noEmit` and `npm run lint` (oxlint) both clean.
 
@@ -123,6 +151,11 @@ there later; not yet included since this is still a prototype, not part of the s
   implemented.
 - **Home and Run History are honest placeholders** — real pages/routes, but no real run data, since there's
   no backend to report it from.
+- **Undo/redo doesn't cover every kind of edit** — node add/delete/duplicate/connect and node/selection drags
+  are covered; in-progress parameter edits and node resizing are not yet wired into the history stack. A
+  deliberate scope cut (matches what was actually asked for), not a gap that snuck in unnoticed.
+- **No minimap or snap-to-grid** — raised as candidate QoL items alongside undo/redo/multi-select but not
+  picked when the owner was asked to prioritize (`docs/KNOWN_ISSUES.md` Open #8 has the full candidate list).
 
 ## Testing limitations found this pass (2026-09-13), and how they're covered instead
 

@@ -12,8 +12,10 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useTranslation } from 'react-i18next'
 import { ToolNode, type ToolNodeType } from './ToolNode'
+import { DeletableEdge } from './DeletableEdge'
 import { DRAG_DATA_FORMAT } from './NodePalette'
 import { TOOL_CATALOG } from '../data/toolCatalog'
+import { isValidConnection } from '../utils/isValidConnection'
 import './PipelineCanvas.css'
 
 let nodeIdCounter = 0
@@ -22,10 +24,21 @@ function nextNodeId() {
   return `node-${nodeIdCounter}`
 }
 
+// All nodes start at this same size regardless of tool name/category length
+// (owner feedback 2026-09-13: "the nodes should all have the same size by
+// default no matter their content"). ToolNode.tsx truncates overflowing text
+// with an ellipsis rather than growing the box. The user can resize from
+// here via the NodeResizer handles ToolNode renders when selected; React
+// Flow persists the result back onto node.width/node.height through the
+// normal onNodesChange stream, same as position drags.
+export const DEFAULT_NODE_WIDTH = 180
+export const DEFAULT_NODE_HEIGHT = 68
+
 // Module-level, not recreated per render - React Flow's own guidance for
 // nodeTypes/edgeTypes objects (a new object identity every render forces it
 // to rebuild internal caches unnecessarily).
 const NODE_TYPES = { tool: ToolNode }
+const EDGE_TYPES = { deletable: DeletableEdge }
 
 // Controlled component - the parent (ComposerPage) owns nodes/edges state
 // (via useNodesState/useEdgesState) so its Save/Run toolbar can read the
@@ -45,7 +58,7 @@ export function PipelineCanvas({
   onNodesChange: OnNodesChange<ToolNodeType>
   onEdgesChange: OnEdgesChange<Edge>
   onConnect: (connection: Connection) => void
-  onSelectNode: (toolId: string | null) => void
+  onSelectNode: (nodeId: string | null) => void
 }) {
   const { t } = useTranslation()
   const { screenToFlowPosition } = useReactFlow()
@@ -66,7 +79,9 @@ export function PipelineCanvas({
         id: nextNodeId(),
         type: 'tool',
         position,
-        data: { toolId },
+        width: DEFAULT_NODE_WIDTH,
+        height: DEFAULT_NODE_HEIGHT,
+        data: { toolId, params: {} },
       }
       onNodesChange([{ type: 'add', item: newNode }])
     },
@@ -74,7 +89,7 @@ export function PipelineCanvas({
   )
 
   const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: ToolNodeType) => onSelectNode(node.data.toolId),
+    (_event: React.MouseEvent, node: ToolNodeType) => onSelectNode(node.id),
     [onSelectNode],
   )
 
@@ -87,9 +102,12 @@ export function PipelineCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
+        defaultEdgeOptions={{ type: 'deletable' }}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}

@@ -18,9 +18,11 @@
     "nodeSelected": "Selected node",
     "clearSelection": "Close",
     "save": "Save",
-    "saveHint": "Downloads a JSON snapshot of the current canvas (nodes, connections, positions).",
+    "saveHint": "Downloads a JSON snapshot of the current canvas (nodes, connections, positions, parameters).",
     "run": "Run",
-    "runDisabledHint": "Not connected to the pipeline yet - this button is a placeholder."
+    "runDisabledHint": "Not connected to the pipeline yet - this button is a placeholder.",
+    "noParams": "No configurable parameters for this tool yet.",
+    "deleteConnection": "Delete connection"
   },
   "history": {
     "title": "Run History",
@@ -38,14 +40,30 @@
   "tools": {
     "fastp": { "name": "fastp", "description": "Trims and quality-filters raw reads." },
     "fastqc": { "name": "FastQC", "description": "Read quality control report." },
-    "bowtie2": { "name": "Bowtie2", "description": "Depletes host reads by alignment." },
+    "bowtie2": {
+      "name": "Bowtie2",
+      "description": "Depletes host reads by alignment.",
+      "params": { "host_fasta": "Host reference FASTA (path or URL)" }
+    },
     "megahit": { "name": "MEGAHIT", "description": "Fast de novo metagenomic assembler." },
     "metaspades": { "name": "metaSPAdes", "description": "Alternative de novo assembler, more accurate but slower." },
-    "kraken2": { "name": "Kraken2", "description": "Taxonomic classification against a reference database." },
+    "kraken2": {
+      "name": "Kraken2",
+      "description": "Taxonomic classification against a reference database.",
+      "params": { "kraken2_db": "Kraken2 database path" }
+    },
     "bracken": { "name": "Bracken", "description": "Re-estimates abundance from a Kraken2 report." },
     "quast": { "name": "QUAST", "description": "Assembly quality assessment." },
-    "genomad": { "name": "geNomad", "description": "Identifies viral and plasmid sequences in contigs." },
-    "checkv": { "name": "CheckV", "description": "Grades completeness and contamination of viral genomes." },
+    "genomad": {
+      "name": "geNomad",
+      "description": "Identifies viral and plasmid sequences in contigs.",
+      "params": { "genomad_db": "geNomad database path" }
+    },
+    "checkv": {
+      "name": "CheckV",
+      "description": "Grades completeness and contamination of viral genomes.",
+      "params": { "checkv_db": "CheckV database path" }
+    },
     "maxbin2": { "name": "MaxBin2", "description": "Groups contigs into per-organism genome bins." },
     "multiqc": { "name": "MultiQC", "description": "Aggregates every tool's output into one report." }
   }

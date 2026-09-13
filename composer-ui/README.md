@@ -29,16 +29,40 @@ actually clicking through it, not from re-reading the requirements:
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,
   not the default light one (a real legibility bug found in testing — the default `Controls` icons were
   unreadable against this app's dark background).
-- **Connect from any side, not just left-to-right** (`src/components/ToolNode.tsx`) — each node has both a
-  source and a target handle on all four sides (top/right/bottom/left), so a pipeline can branch vertically
-  as well as horizontally. Target handles are blue, source handles are green, offset slightly apart on each
-  side so both stay individually grabbable rather than exactly overlapping.
+- **Exactly 4 handles per node, fixed direction** (`src/components/ToolNode.tsx`) — top/left are always
+  incoming (target, blue), right/bottom are always outgoing (source, green). Corrected 2026-09-13 from an
+  earlier 8-handle version (a source+target pair on every side) after owner feedback: "i only asked for 4 in
+  total, not 8... we assume both the left and top are connections to previous nodes, while bottom and right
+  are connection to the next nodes." Any handle accepts any number of simultaneous edges (React Flow's
+  default, no extra config needed) — verified in-browser with two separate source nodes both connected into
+  the same target handle.
+- **Self-connection is blocked** (`src/utils/isValidConnection.ts`, passed to `<ReactFlow isValidConnection>`)
+  — a node can never connect to itself; dragging a handle back onto its own node's handle is rejected and
+  just selects the node instead. Unit-tested and confirmed live in-browser.
+- **Connections are deletable** (`src/components/DeletableEdge.tsx`) — clicking a connection selects it and
+  shows an "×" button at its midpoint; clicking that removes just that edge. Confirmed live in-browser
+  (jsdom cannot simulate this interaction — see Testing section below for why).
+- **Per-node parameter editing** — clicking a node opens the same floating detail panel used for
+  select/hover, now with an editable form for any real pipeline parameters that tool has (grounded in actual
+  `nextflow.config` params, not invented: `bowtie2` → `host_fasta`, `kraken2` → `kraken2_db`, `genomad` →
+  `genomad_db`, `checkv` → `checkv_db`). Tools with no configurable params show an honest "no configurable
+  parameters" message instead of an empty form. Params are per-node-instance (two Kraken2 nodes can hold
+  different DB paths) and are included in the Save snapshot. The pure merge logic is unit-tested
+  (`src/utils/updateNodeParam.test.ts`); the click-to-select interaction that triggers it is verified live
+  in-browser only (see Testing section).
+- **All nodes share one fixed default size** (180×68px, set in `src/components/PipelineCanvas.tsx`'s
+  `DEFAULT_NODE_WIDTH`/`DEFAULT_NODE_HEIGHT`) regardless of the tool name/category text length — owner
+  feedback 2026-09-13: "the nodes should all have the same size by default no matter their content." Text
+  that overflows is truncated with an ellipsis rather than growing the box.
+- **Nodes are resizable** — selecting a node reveals React Flow's `NodeResizer` handles (min 120×56px);
+  dragging them resizes just that node, persisted the same way a position drag is (through the normal
+  `onNodesChange` stream onto `node.width`/`node.height`). Verified live in-browser.
 - **Save and Run buttons** on the Composer toolbar. Save genuinely works client-side today — downloads a
-  JSON snapshot of the canvas (node ids/types/positions/data, edge connections) via a `Blob` + `<a
-  download>`. This is a real first step toward §6.11's full export/import fidelity requirement, not the
-  finished feature (no per-node parameter editing exists yet to serialize, no import path, no schema
-  migration story). Run is visible but genuinely disabled, with a tooltip explaining why - there's no
-  backend to run anything against yet; a disabled button with an honest reason beats a missing one.
+  JSON snapshot of the canvas (node ids/types/positions/data including params, edge connections) via a
+  `Blob` + `<a download>`. This is a real step toward §6.11's full export/import fidelity requirement, not
+  the finished feature (still no import path, no schema migration story). Run is visible but genuinely
+  disabled, with a tooltip explaining why - there's no backend to run anything against yet; a disabled
+  button with an honest reason beats a missing one.
 - Live French/English switching (`src/i18n/`, react-i18next) — every piece of UI chrome, every node
   label/description, and now the Save/Run button labels are translated, verified live to actually re-render
   when the toggle is clicked, including already-placed canvas nodes.
@@ -49,16 +73,22 @@ actually clicking through it, not from re-reading the requirements:
   including a node already on the canvas and the Save/Run buttons, the Run button's `disabled` state and
   reduced opacity confirmed directly via the DOM (not just visually assumed), the Save button's click handler
   executing without error, real client-side navigation between all three pages (URL genuinely changes each
-  time), the zoom/fit-view controls' icons actually legible against the dark canvas, and a real vertical
-  (bottom-to-top) connection drawn between two nodes and confirmed present in the rendered DOM (1 edge, 16
-  handles = 8 per node × 2 nodes).
-- `npm test` (Vitest + React Testing Library, 18 tests) — i18n key-structure parity between `en.json`/
+  time), the zoom/fit-view controls' icons actually legible against the dark canvas, exactly 4 handles per
+  node with the correct fixed target/source roles, self-connection genuinely rejected, a real cross-node
+  connection drawn and confirmed in the DOM, two separate edges landing on the same target handle confirmed
+  in the DOM (multi-edge-per-handle), a selected edge's "×" button confirmed to actually remove just that
+  edge, real parameter editing (typing into a Kraken2 node's DB-path field and having it retained), two nodes
+  with very different label lengths rendering at the identical default size with ellipsis truncation, a node
+  resize confirmed to persist after dragging its `NodeResizer` handle, and the target/source handle colors
+  confirmed (via computed style) to survive React Flow's own `connectingfrom`/`connectionindicator` states.
+- `npm test` (Vitest + React Testing Library, 25 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
-  route navigation actually swaps the rendered page for all three pages, and every `ToolNode` renders a
-  source + target handle pair (with unique ids) on all four sides.
+  route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
+  handles with the correct fixed target/source roles, self-connection rejected by `isValidConnection`, and
+  the param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings.
 - `npm run build` — a real production build succeeds.
-- `npx tsc -b` and `npm run lint` (oxlint) both clean.
+- `npx tsc --noEmit` and `npm run lint` (oxlint) both clean.
 
 **Real bug hit and fixed while doing this pass**: after bulk-syncing changed files between the Windows and
 WSL copies (this project's established dual-copy workflow, `CONTRIBUTING.md` §0), Vite's dev server threw a
@@ -86,13 +116,48 @@ there later; not yet included since this is still a prototype, not part of the s
   connection, no way to actually execute what's built on the canvas. The Run button reflects this honestly
   (visible, disabled, with a tooltip) rather than pretending to work. That's real, separate, unbuilt scope
   (`docs/planning/PLAN.md` §6.12).
-- **Save is a partial step, not §6.11's full requirement.** It downloads node/edge structure and positions,
-  but there's no per-node parameter editing yet to serialize, and no matching Import/load path at all.
+- **Save is a partial step, not §6.11's full requirement.** It downloads node/edge structure, positions, and
+  per-node params, but there's no matching Import/load path at all, and no schema-version migration story.
 - **Does not enforce type-compatibility between connected nodes** — any node can currently connect to any
   other node on the canvas. §6.10's confirmed requirement (the Bracken/contigs-report bug) is not yet
   implemented.
 - **Home and Run History are honest placeholders** — real pages/routes, but no real run data, since there's
   no backend to report it from.
+
+## Testing limitations found this pass (2026-09-13), and how they're covered instead
+
+React Flow's node/edge interactions rely on browser APIs jsdom doesn't implement (`ResizeObserver`,
+`DOMMatrixReadOnly`, and real `getBoundingClientRect`/pointer-capture on individual handle elements). Two
+real ceilings were hit and are not worth chasing further:
+- **Edges cannot be rendered at all in jsdom**, even after stubbing `ResizeObserver` (to synchronously report
+  a fake measured size — a no-op stub left nodes permanently "unmeasured") and `DOMMatrixReadOnly` (which
+  React Flow's zoom-level reading needs). `.react-flow__edges` stays empty with no thrown error regardless —
+  `src/components/DeletableEdge.test.tsx` was written, confirmed to hit this ceiling, and deleted rather than
+  kept as a perpetually-failing or fake test.
+- **Node click-to-select cannot be simulated in jsdom** — `userEvent.click`, `fireEvent.click`, and a manual
+  pointerdown/pointerup/click sequence all fail to trigger React Flow's internal `onNodeClick` (it relies on
+  `setPointerCapture`, unimplemented in jsdom).
+
+Both are covered the same way this codebase already covers drag-and-drop (`NodePalette.test.tsx` tests the
+`dataTransfer` contract, not a full simulated drop-and-render cycle): extract the underlying pure logic into
+a directly-testable function (`src/utils/isValidConnection.ts`, `src/utils/updateNodeParam.ts`), unit-test
+that, and verify the actual pointer interaction live in a real browser instead of faking it in jsdom.
+
+## Bugs found and fixed this pass (2026-09-13), from real owner testing
+
+- **Connection-point colors intermittently reverted to the library's default grey.** Root cause: React
+  Flow's base stylesheet has a same-specificity `.react-flow__handle { background-color: var(...) }` rule
+  that also applies to its own `.connectingfrom`/`.connectionindicator` states during an active connection
+  drag, so our `.tool-node__handle--target`/`--source` color rules could lose the cascade mid-drag. Fixed
+  with `!important` on those two rules (justified in a comment in `ToolNode.css` — not a habit, a specific
+  answer to a specific same-specificity collision); confirmed fixed by adding those state classes via script
+  and checking the computed background color stays our blue/green.
+- **Node size varied with content length**, e.g. a long category label made one node visibly wider than a
+  short one. Fixed by giving every new node an explicit default `width`/`height` (180×68, in
+  `PipelineCanvas.tsx`) that `ToolNode`'s CSS fills at 100%/100%, with overflowing text ellipsis-truncated
+  instead of growing the box.
+- **No way to resize a node** — added via React Flow's own `NodeResizer` component, shown only while a node
+  is selected.
 
 None of this is an oversight - PLAN.md §6.16 scoped this pass as "requirements + a working prototype of the
 UI shell," not a full build. See `docs/KNOWN_ISSUES.md` for the dated entry with full context.

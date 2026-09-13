@@ -1,0 +1,25 @@
+.deletable-edge--selected {
+  stroke: #3a6cf4;
+  stroke-width: 2;
+}
+
+.deletable-edge__delete {
+  position: absolute;
+  pointer-events: all;
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  border-radius: 50%;
+  border: 1px solid #666;
+  background: #222;
+  color: #eee;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.deletable-edge__delete:hover {
+  background: #b34747;
+  border-color: #b34747;
+  color: #fff;
+}

@@ -5,15 +5,17 @@ import { NodePalette } from '../components/NodePalette'
 import { PipelineCanvas } from '../components/PipelineCanvas'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import type { ToolNodeType } from '../components/ToolNode'
+import { updateNodeParam as mergeNodeParam } from '../utils/updateNodeParam'
 import './ComposerPage.css'
 
-// Downloads a JSON snapshot of the canvas (nodes: id/type/position/data,
-// edges: source/target) via a Blob + temporary <a download> - genuinely
-// works client-side, no backend needed for this much. NOT the full §6.11
-// export-fidelity requirement (no per-node parameter editing exists yet to
-// serialize, no import path, no schema version) - a real first step, not
-// the finished feature. Named for a human reading the download, not a
-// hash, so it's obviously "a microbox pipeline" in a Downloads folder.
+// Downloads a JSON snapshot of the canvas (nodes: id/type/position/data -
+// data now includes each node's edited params - edges: source/target) via
+// a Blob + temporary <a download> - genuinely works client-side, no
+// backend needed for this much. NOT the full §6.11 export-fidelity
+// requirement (no import path, no schema-version migration story) - a
+// real first step, not the finished feature. Named for a human reading
+// the download, not a hash, so it's obviously "a microbox pipeline" in a
+// Downloads folder.
 function downloadCanvasSnapshot(nodes: ToolNodeType[], edges: Edge[]) {
   const snapshot = {
     formatVersion: 1,
@@ -32,12 +34,31 @@ function downloadCanvasSnapshot(nodes: ToolNodeType[], edges: Edge[]) {
 
 function ComposerInner() {
   const { t } = useTranslation()
-  const [nodes, , onNodesChange] = useNodesState<ToolNodeType>([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<ToolNodeType>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const [selectedToolId, setSelectedToolId] = useState<string | null>(null)
-  const selectedTool = TOOL_CATALOG.find((tool) => tool.id === selectedToolId) ?? null
+  // Tracks the selected NODE instance, not just its tool type - two nodes
+  // of the same tool can hold different parameter values, so the detail/
+  // edit panel needs to know exactly which node is selected, not just
+  // which kind of tool it is (corrected 2026-09-13 alongside adding
+  // per-node parameter editing).
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+  const selectedTool = selectedNode ? TOOL_CATALOG.find((tool) => tool.id === selectedNode.data.toolId) : null
 
-  const onConnect = useCallback((connection: Connection) => setEdges((eds) => addEdge(connection, eds)), [setEdges])
+  // New edges are explicitly typed 'deletable' (DeletableEdge, the X-on-
+  // click component) rather than relying on ReactFlow's defaultEdgeOptions
+  // prop to apply automatically through this custom onConnect handler -
+  // addEdge() is a plain utility function and doesn't know about that prop
+  // on its own, so it's set here directly to be certain, not assumed.
+  const onConnect = useCallback(
+    (connection: Connection) => setEdges((eds) => addEdge({ ...connection, type: 'deletable' }, eds)),
+    [setEdges],
+  )
+
+  const updateNodeParam = useCallback(
+    (nodeId: string, key: string, value: string) => setNodes((nds) => mergeNodeParam(nds, nodeId, key, value)),
+    [setNodes],
+  )
 
   return (
     <div className="composer-page">
@@ -70,15 +91,31 @@ function ComposerInner() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onSelectNode={setSelectedToolId}
+            onSelectNode={setSelectedNodeId}
           />
-          {selectedTool && (
+          {selectedNode && selectedTool && (
             <aside className="composer-page__detail" aria-label={t('composer.nodeSelected')}>
-              <button type="button" className="composer-page__detail-close" onClick={() => setSelectedToolId(null)}>
+              <button type="button" className="composer-page__detail-close" onClick={() => setSelectedNodeId(null)}>
                 {t('composer.clearSelection')}
               </button>
               <h3>{t(selectedTool.nameKey)}</h3>
               <p>{t(selectedTool.descriptionKey)}</p>
+              {selectedTool.params && selectedTool.params.length > 0 ? (
+                <form className="composer-page__params" onSubmit={(e) => e.preventDefault()}>
+                  {selectedTool.params.map((param) => (
+                    <label key={param.key} className="composer-page__param-field">
+                      <span>{t(param.labelKey)}</span>
+                      <input
+                        type="text"
+                        value={selectedNode.data.params[param.key] ?? ''}
+                        onChange={(e) => updateNodeParam(selectedNode.id, param.key, e.target.value)}
+                      />
+                    </label>
+                  ))}
+                </form>
+              ) : (
+                <p className="composer-page__no-params">{t('composer.noParams')}</p>
+              )}
             </aside>
           )}
         </div>

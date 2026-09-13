@@ -95,3 +95,38 @@
   color: #fff;
   border-color: #666;
 }
+
+.composer-page__params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.composer-page__param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #ccc;
+}
+
+.composer-page__param-field input {
+  background: #111;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #eee;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.composer-page__param-field input:focus {
+  outline: none;
+  border-color: #3a6cf4;
+}
+
+.composer-page__no-params {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: #777;
+}

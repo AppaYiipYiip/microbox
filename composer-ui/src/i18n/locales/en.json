@@ -35,6 +35,8 @@
     "enabled": "Enabled",
     "skippedBadge": "Skipped",
     "skippedTooltip": "Skipped - this stage will not run.",
+    "autoArrange": "Auto-arrange",
+    "autoArrangeHint": "Arranges nodes into columns based on their connections, left to right.",
     "import": "Import",
     "importHint": "Loads a previously saved pipeline JSON file, replacing the current canvas.",
     "importError": {

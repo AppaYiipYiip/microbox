@@ -14,6 +14,7 @@ import { parseCanvasSnapshot, type ImportError } from '../utils/importCanvasSnap
 import { KRAKEN2_DB_VARIANTS, conventionalKraken2DbPath } from '../data/kraken2DbVariants'
 import { recommendKraken2Db } from '../utils/recommendKraken2Db'
 import { estimateDeviceMemoryGiB } from '../utils/estimateDeviceMemory'
+import { computeAutoLayout } from '../utils/autoLayout'
 import './ComposerPage.css'
 
 function toolName(t: (key: string) => string, toolId: string): string {
@@ -200,6 +201,18 @@ function ComposerInner() {
     },
     [nodes, takeSnapshot, setNodes],
   )
+
+  // Auto-arrange (PLAN.md §6.16 canvas nice-to-have: "auto-layout/auto-
+  // arrange"). Only repositions nodes - never touches connections/params/
+  // enabled state - and takes a history snapshot first like every other
+  // mutation here, so a layout the user doesn't like is one Ctrl+Z away
+  // from being undone.
+  const autoArrange = useCallback(() => {
+    const positions = computeAutoLayout(nodes, edges)
+    if (Object.keys(positions).length === 0) return
+    takeSnapshot()
+    setNodes((nds) => nds.map((n) => (positions[n.id] ? { ...n, position: positions[n.id] } : n)))
+  }, [nodes, edges, takeSnapshot, setNodes])
 
   // Copy/cut/paste (owner, 2026-09-13: "i assume ctrl+c or x or z or r are
   // working") - scoped to the single selected node, same as Duplicate, not
@@ -395,6 +408,15 @@ function ComposerInner() {
             onClick={handleRedo}
           >
             ↻
+          </button>
+          <button
+            type="button"
+            className="composer-page__btn"
+            title={t('composer.autoArrangeHint')}
+            disabled={nodes.length === 0}
+            onClick={autoArrange}
+          >
+            {t('composer.autoArrange')}
           </button>
           <button
             type="button"

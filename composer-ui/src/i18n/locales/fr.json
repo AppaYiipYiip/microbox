@@ -35,6 +35,8 @@
     "enabled": "Activé",
     "skippedBadge": "Ignoré",
     "skippedTooltip": "Ignoré - cette étape ne sera pas exécutée.",
+    "autoArrange": "Organiser",
+    "autoArrangeHint": "Organise les nœuds en colonnes selon leurs connexions, de gauche à droite.",
     "import": "Importer",
     "importHint": "Charge un fichier JSON de pipeline précédemment enregistré, en remplaçant la zone de travail actuelle.",
     "importError": {

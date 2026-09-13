@@ -19,6 +19,12 @@ edges shown dashed-amber plus a warning banner, non-blocking. Also confirmed the
 already faithfully mirrors the only real per-tool params (`host_fasta`/`kraken2_db`/`genomad_db`/
 `checkv_db` - all paths, verified against `nextflow.config` directly). See "Composer canvas: connections
 validated against the real pipeline's fixed backbone..." below.
+**Composer Auto-arrange added** (PLAN.md §6.16's last unbuilt canvas nice-to-have) — a hand-rolled, dependency-
+free left-to-right layered layout (longest-path columns, graceful cycle fallback), verified live via each
+node's actual CSS transform. Also double-checked Ctrl+Z/Ctrl+Y at the owner's request and confirmed no bug -
+an earlier apparent failure traced entirely to this session's already-known flaky drag-and-drop in browser
+automation, not the app. Test suite grew from 72 to 78. See "Composer canvas: Auto-arrange..." and
+"Ctrl+Z/Ctrl+Y double-checked..." below.
 **Kraken2 database-variant selector with a hardware-based recommendation added to the composer** — four real
 variants grounded in PLAN.md §2.3's own research (checked against `bin/download-dbs.sh`'s actual case
 statement for which are really downloadable today), a "Use this path" button per wired variant, and an
@@ -694,5 +700,39 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   that node's actual param, not a cosmetic suggestion. Deliberately scoped to Kraken2 only (matches "when it
   comes to kraken" exactly) - geNomad/CheckV/Bowtie2 have their own DB/reference paths but don't get this
   treatment; the same pattern would generalize if asked for. Test suite grew from 64 to 72.
+
+- **Composer canvas: Auto-arrange, 2026-09-13** (owner: "go ahead and keep going. do not stop to update me
+  until i interrupt you" - continuing per PLAN.md §6.16's own canvas nice-to-have list, "auto-layout/auto-
+  arrange," the one item left unbuilt from that list once minimap/snap-to-grid were explicitly declined,
+  Open #8). `src/utils/autoLayout.ts` (`computeAutoLayout`, pure, unit-tested) hand-rolls a simple left-to-
+  right layered layout rather than pulling in a graph-layout library (dagre/elkjs) - this toolbox is bounded
+  to ~20 nodes (PLAN.md §6.7/§6.10's own framing), and a real dependency decision (which library, its
+  bundle-size cost, one more thing to keep updated) isn't worth it for a layout this simple. Each node's
+  column is the LONGEST path from any root to it, so a node fed by two branches at different depths lands
+  after both, never overlapping a predecessor; a rootless node is column 0 - a normal, valid state on this
+  canvas (every reads-stage in the real pipeline is independently skippable), not an error case. The
+  composer doesn't forbid drawing a cycle even though `src/utils/validatePipeline.ts` already separately
+  flags it as something the real pipeline can't execute - since a cycle can't be topologically layered by
+  definition, any node still unresolved once nothing else can move is placed in column 0 alongside the real
+  roots, rather than looping forever chasing an ordering that doesn't exist (a real Kahn's-algorithm-style
+  termination condition, not just "assume it terminates"). Only repositions nodes - connections, params, and
+  enabled state are untouched - and takes a history snapshot first like every other mutation in this file.
+  **Verified live in-browser, not just unit-tested**: dropped two nodes at scattered positions, connected
+  them, clicked Auto-arrange, and confirmed via each node's actual CSS transform (not eyeballed) that they
+  landed at exactly `(0, 0)` and `(260, 0)` - one column apart, matching `COLUMN_WIDTH`; one press of Undo
+  restored the original scattered positions exactly. Test suite grew from 72 to 78.
+
+- **Ctrl+Z/Ctrl+Y double-checked at the owner's request, 2026-09-13 ("ctrl y and ctrl z?") - confirmed
+  already correct, no bug found.** Investigated because an earlier live-browser check that session appeared
+  to show Ctrl+Y doing nothing after an undo. Root-caused via targeted debug logging (temporarily added
+  and removed from `ComposerPage.tsx`) plus step-by-step DOM state checks: the apparent failure was entirely
+  caused by this session's own already-documented flaky-drag-and-drop issue in browser automation - the node
+  drop itself had silently failed each time, so there was genuinely nothing in `history.past` to undo and
+  nothing in `history.future` to redo; both buttons being disabled was the CORRECT behavior, not a bug.
+  Re-verified with a confirmed-successful drop: Ctrl+Z correctly undoes, Ctrl+Y correctly redoes, both via
+  keyboard and via directly clicking the Undo/Redo buttons, in a full undo→redo→undo cycle checked against
+  both the DOM node count and each button's own `disabled` state at every step. No code change - this entry
+  exists so a future reader doesn't waste time re-investigating a report that traces back to test-tooling
+  flakiness, not the app.
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).

@@ -99,6 +99,22 @@ actually clicking through it, not from re-reading the requirements:
   "not yet downloadable"); clicking "Use this path" on Viral filled the real path field with
   `~/microbox-dbs/kraken2/viral` and the node's override dot appeared, confirming it's a real, working
   update to that node's actual param, not a cosmetic suggestion.
+- **Auto-arrange** (PLAN.md §6.16 canvas nice-to-have: "auto-layout/auto-arrange") — a toolbar button that
+  lays every node out left-to-right in columns based on its connections (`src/utils/autoLayout.ts`, pure,
+  unit-tested). Hand-rolled instead of a graph-layout library (dagre/elkjs) - this toolbox is bounded to
+  ~20 nodes (PLAN.md §6.7/§6.10's own framing), and a real dependency decision (which library, its bundle-
+  size cost, one more thing to keep updated) isn't worth it for a layout this simple. Each node's column is
+  the LONGEST path from any root to it (so a node fed by two branches at different depths lands after both,
+  never overlapping a predecessor); a node with no incoming edges is column 0 - a normal, valid starting
+  point on this canvas (every reads-stage in the real pipeline is independently skippable), not an error
+  case. The composer doesn't forbid drawing a cycle even though the real pipeline can't execute one
+  (`src/utils/validatePipeline.ts` already flags that separately) - a cycle can't be topologically layered
+  by definition, so any node still unresolved once nothing else can move is placed in column 0 alongside the
+  real roots, rather than looping forever. Only repositions nodes - never touches connections, params, or
+  enabled state - and takes a history snapshot first like every other mutation here. **Verified live
+  in-browser**: two nodes dropped at scattered positions and connected, then Auto-arrange placed them at
+  exactly `(0, 0)` and `(260, 0)` (confirmed via each node's actual CSS transform, not just eyeballed) - one
+  press of Undo restored their original scattered positions exactly.
 - A React Flow canvas (`src/components/PipelineCanvas.tsx`, `colorMode="dark"`) — drag a tool from the
   palette, drop it on the canvas, connect nodes, click to select (a floating detail panel over the canvas,
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,
@@ -237,7 +253,7 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 72 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 78 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
@@ -255,8 +271,10 @@ actually clicking through it, not from re-reading the requirements:
   collapses/re-expands a category (with a matching search still surfacing a collapsed category's tools),
   `recommendKraken2Db` (`src/utils/recommendKraken2Db.ts`) recommends the correct variant across a range of
   real RAM figures (including the real 7 GiB/11 GiB cases from this project's own past findings) and never
-  returns nothing, and `estimateDeviceMemoryGiB` returns the browser-reported value when present and `null`
-  when the API isn't supported.
+  returns nothing, `estimateDeviceMemoryGiB` returns the browser-reported value when present and `null`
+  when the API isn't supported, and `computeAutoLayout` (`src/utils/autoLayout.ts`) lays out a linear chain
+  in increasing columns, places a node after the DEEPER of two ancestors, gives every rootless node the
+  same first column, and never infinite-loops on a cycle.
 - `npm run build` — a real production build succeeds. **Note**: `npx tsc --noEmit` alone is not sufficient -
   it missed a real type error (`Object.fromEntries` losing type narrowing through a `.filter()`) that only
   `npm run build`'s `tsc -b` (project-reference build) caught, presumably a difference in which tsconfig each

@@ -81,9 +81,13 @@
   white-space: nowrap;
 }
 
+/* ~10% bigger than the original 8px - owner feedback 2026-09-13 ("sometimes
+   difficult to select it") - must stay in sync with HANDLE_SIZE in
+   nodeDefaults.ts, which uses this same size to estimate handle positions
+   for nodes React Flow hasn't measured yet. */
 .tool-node__handle {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   border: 1.5px solid #141414;
 }

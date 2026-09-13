@@ -41,7 +41,10 @@ export const HANDLE_SIDES: { id: string; type: HandleType; position: Position }[
 // applied to fresh palette drops below for consistency, since nothing
 // guarantees that human-timescale gap will always exist (e.g. a future
 // "connect on drop" feature).
-const HANDLE_SIZE = 8
+// Must match .tool-node__handle's actual rendered size (ToolNode.css) -
+// ~10% bigger than the original 8px, owner feedback 2026-09-13 ("sometimes
+// difficult to select it").
+const HANDLE_SIZE = 9
 
 export function defaultNodeHandles(width: number, height: number): NodeHandle[] {
   return HANDLE_SIDES.map(({ id, type, position }) => {

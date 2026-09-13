@@ -883,3 +883,9 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   all 13 `basic` cases still green (29 total, 0 regressions) - confirmed against the real downloaded `viral`
   Kraken2 DB already present on this machine, not mocked. Composer-ui test suite grew from 91 to 93
   (`pipelineTopology.ts`/`validatePipeline.test.ts` coverage for the two new valid connections).
+
+- **Composer canvas: connection points made ~10% bigger, 2026-09-13** (owner: "sometimes difficult to select
+  it"). `.tool-node__handle` (`ToolNode.css`) 8px → 9px; `HANDLE_SIZE` in `nodeDefaults.ts` (used to estimate
+  handle positions for not-yet-measured nodes - see the 2026-09-13 import-rendering fix above) kept in sync
+  at the same value, since the two must match or the pre-measurement estimate would be slightly off from the
+  real rendered position. Verified live: `getBoundingClientRect()` on a real rendered handle now reports 9px.

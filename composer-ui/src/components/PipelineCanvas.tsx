@@ -19,7 +19,7 @@ import { DRAG_DATA_FORMAT } from './NodePalette'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import { isValidConnection } from '../utils/isValidConnection'
 import { nextNodeId } from '../utils/nodeId'
-import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../data/nodeDefaults'
+import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, defaultNodeHandles } from '../data/nodeDefaults'
 import './PipelineCanvas.css'
 
 // Accepts both keys so Delete works on Windows and Backspace works on macOS
@@ -97,6 +97,7 @@ export function PipelineCanvas({
         position,
         width: DEFAULT_NODE_WIDTH,
         height: DEFAULT_NODE_HEIGHT,
+        handles: defaultNodeHandles(DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT),
         data: { toolId, params: {} },
       }
       onBeforeAddNode()

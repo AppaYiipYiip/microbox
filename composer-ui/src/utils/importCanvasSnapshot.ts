@@ -1,7 +1,7 @@
 import { addEdge, type Edge } from '@xyflow/react'
 import type { ToolNodeType } from '../components/ToolNode'
 import { TOOL_CATALOG } from '../data/toolCatalog'
-import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../data/nodeDefaults'
+import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, defaultNodeHandles } from '../data/nodeDefaults'
 import { nextNodeId } from './nodeId'
 
 // Parses and validates a canvas snapshot downloaded by downloadCanvasSnapshot
@@ -83,12 +83,19 @@ export function parseCanvasSnapshot(jsonText: string): ImportResult {
           )
         : {}
 
+    const width = isFiniteNumber(node.width) ? node.width : DEFAULT_NODE_WIDTH
+    const height = isFiniteNumber(node.height) ? node.height : DEFAULT_NODE_HEIGHT
+
     importedNodes.push({
       id: newId,
       type: 'tool',
       position: { x: position.x, y: position.y },
-      width: isFiniteNumber(node.width) ? node.width : DEFAULT_NODE_WIDTH,
-      height: isFiniteNumber(node.height) ? node.height : DEFAULT_NODE_HEIGHT,
+      width,
+      height,
+      // See defaultNodeHandles() - without this, edges connecting two
+      // freshly-imported nodes silently fail to render (React Flow can't
+      // yet measure real handle positions for nodes it just received).
+      handles: defaultNodeHandles(width, height),
       data: { toolId: data.toolId, params, enabled: data.enabled !== false },
     })
   }

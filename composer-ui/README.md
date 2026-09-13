@@ -218,6 +218,9 @@ actually clicking through it, not from re-reading the requirements:
   a real `File`/`DataTransfer` dispatched to the actual file input, and confirmed every field round-tripped
   exactly (position, size, enabled state, param value, and which specific handles the edge used) — plus
   confirmed a deliberately malformed file is rejected with a clear message and leaves the canvas untouched.
+  (A follow-up integration test the same day found the edge itself didn't actually *render* despite the data
+  round-tripping correctly - see "Imported edges silently failed to render" below; this bullet's round-trip
+  claim is accurate for the data, the separate rendering gap is now fixed and verified too.)
 - **Save/Run buttons** — Run is visible but genuinely disabled, with a tooltip explaining why - there's no
   backend to run anything against yet; a disabled button with an honest reason beats a missing one.
 - Live French/English switching (`src/i18n/`, react-i18next) — every piece of UI chrome, every node
@@ -253,7 +256,7 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 78 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 81 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
@@ -387,6 +390,19 @@ directly either way).
   used would have rendered from whichever handle React Flow finds first on import (confirmed by reading
   `@xyflow/system`'s own source: `getHandle$1`, `"if no handleId is given, we use the first handle"`) — not
   a crash, just a silently wrong-looking reconstruction. Fixed by including both in `downloadCanvasSnapshot`.
+- **Imported edges silently failed to render at all, found 2026-09-13 during a self-initiated integration
+  test** (a real fastp→Bowtie2(disabled)→Kraken2(param set) chain, exported and re-imported). Nodes and edges
+  were both correctly reconstructed in React state (confirmed via a standalone Vitest reproduction and a live
+  tracer), but the DOM stayed at 0 edges indefinitely — no timing delay, re-render, or wait fixed it. **Root
+  cause**: React Flow can't draw an edge until it has asynchronously measured its endpoint nodes' real handle
+  positions; a palette drop always gets a human-timescale gap before a connection is drawn to it, but import
+  sets new nodes AND their edges in the same operation, so the edge's first (and, confirmed live, only ever)
+  render finds the nodes still unmeasured and silently gives up. Fixed with React Flow's own `Node.handles`
+  escape hatch — `defaultNodeHandles()` in `src/data/nodeDefaults.ts` pre-declares approximate handle
+  positions so edges can render immediately; real measurement still lands moments later and silently
+  overwrites the estimate with the pixel-exact one. Applied to both `importCanvasSnapshot.ts` and
+  `PipelineCanvas.tsx`'s palette-drop path. Verified live: the exact failing 3-node scenario now renders both
+  edges immediately on import, with the disabled badge and param-override dot both correctly preserved too.
 
 None of this is an oversight - PLAN.md §6.16 scoped this pass as "requirements + a working prototype of the
 UI shell," not a full build. See `docs/KNOWN_ISSUES.md` for the dated entry with full context.

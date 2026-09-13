@@ -52,6 +52,31 @@ describe('parseCanvasSnapshot', () => {
     expect(edge.type).toBe('deletable')
   })
 
+  // Regression test for a real bug found 2026-09-13: importing a saved
+  // pipeline created correct nodes and edges in React state, but the edges
+  // never rendered - React Flow can't compute an edge's position until it
+  // has measured the node's real handle positions (an async pass), and a
+  // fresh import gives it no time to do that before the edge's first render.
+  // Pre-declaring `handles` (docs/KNOWN_ISSUES.md 2026-09-13 entry) makes
+  // React Flow's `isNodeInitialized` check pass synchronously instead of
+  // waiting on that measurement - this only verifies the data shape parseCanvasSnapshot
+  // hands React Flow, since the render-time behavior itself is browser-only.
+  it('gives every imported node explicit handle positions so edges can render before React Flow measures anything', () => {
+    const result = parseCanvasSnapshot(validSnapshotJson())
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    for (const node of result.nodes) {
+      expect(node.handles).toHaveLength(4)
+      const ids = node.handles!.map((h) => h.id).sort()
+      expect(ids).toEqual(['bottom', 'left', 'right', 'top'])
+      for (const handle of node.handles!) {
+        expect(Number.isFinite(handle.x)).toBe(true)
+        expect(Number.isFinite(handle.y)).toBe(true)
+      }
+    }
+  })
+
   it('defaults enabled to true and params to {} when the file omits them', () => {
     const json = JSON.stringify({
       formatVersion: 1,

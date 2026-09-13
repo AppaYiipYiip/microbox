@@ -4,7 +4,14 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**Composer canvas corrected to the owner's exact spec** — 4 fixed-direction handles
+Last updated: 2026-09-13 (**Composer canvas: a real imported-edges-don't-render bug found and fixed** — building
+a fuller integration test (a real multi-node chain, disabled node, param set, exported, re-imported) surfaced a
+genuine React Flow gotcha: edges connecting brand-new nodes silently never render because the library can't yet
+measure their real handle positions, and never self-corrects afterward either. Fixed via React Flow's own
+`Node.handles` escape hatch (`defaultNodeHandles()` in `src/data/nodeDefaults.ts`), applied to both import and
+palette-drop paths; verified live via a real file-based import round trip. Test suite grew from 78 to 81. See
+"Composer canvas: imported edges silently failed to render..." below.
+**Composer canvas corrected to the owner's exact spec** — 4 fixed-direction handles
 (not 8), self-connection blocked, connections deletable via an "×" on click, real per-node parameter editing
 grounded in actual `nextflow.config` values, all verified live in-browser; same-day follow-up fixed a real
 connection-color bug (a same-specificity CSS collision with React Flow's own connection-drag state classes),
@@ -736,3 +743,37 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   flakiness, not the app.
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).
+
+- **Composer canvas: imported edges silently failed to render, 2026-09-13 — found via self-initiated integration
+  testing** (owner: "go ahead and keep going... do not stop to update me until i interrupt you" - building a real
+  multi-node chain, disabling a node, setting a param, exporting, and re-importing it together was judged the
+  highest-value next check, the same technique that caught the selection-highlight bug earlier this session).
+  Exporting a real fastp→Bowtie2(disabled)→Kraken2(`kraken2_db` set) chain and re-importing that exact file
+  produced 3 correctly-remapped nodes but **zero edges in the DOM**, even though `parseCanvasSnapshot` returned
+  the correct edges (verified via a standalone Vitest reproduction) and React's own `edges` state genuinely held
+  them (verified via a temporary tracer `useEffect`) - waiting 3+ seconds, forcing a re-render via Auto-arrange,
+  and a 50ms-delayed `setEdges` call all failed to fix it, ruling out a simple timing race. **Root cause, found by
+  reading React Flow's own bundled source (`@xyflow/react`/`@xyflow/system`):** an edge only renders once React
+  Flow has measured its endpoint nodes' real handle positions (`internals.handleBounds`, `isNodeInitialized()` in
+  `@xyflow/system`) - a background `ResizeObserver` pass that happens after mount. A palette-dropped node always
+  gets a human-timescale gap before the user draws a connection to it, so this measurement lands first; import
+  sets brand-new nodes AND the edges connecting them in the same operation, giving `getEdgePosition()` nothing to
+  work with on the edge's very first render - and, confirmed by live testing, it silently never re-evaluates
+  afterward either (returns `null` with no console warning, by design - `error008` only fires for an unresolvable
+  *handle*, not for an uninitialized node). **Fix:** `src/data/nodeDefaults.ts` adds `defaultNodeHandles(width,
+  height)`, using React Flow's own documented escape hatch for exactly this (`Node.handles`) to pre-declare
+  approximate handle positions (mirroring `ToolNode.tsx`'s fixed top/left-target, right/bottom-source layout) so
+  `isNodeInitialized()` is true synchronously, with no measurement wait - the real `ResizeObserver` pass still
+  runs afterward and silently overwrites this estimate with the pixel-exact one once it completes, since
+  `internals.handleBounds` always takes precedence over `node.handles` when both exist. Applied in
+  `importCanvasSnapshot.ts` (where the bug actually surfaces) and, for consistency/future-proofing, in
+  `PipelineCanvas.tsx`'s palette-drop path too, since nothing guarantees that human-timescale gap will always
+  exist. **Verified fixed live in-browser**, not just unit-tested: reproduced the exact failing 3-node scenario
+  above via a real export→import round trip (a simulated file picked via a real `File`/`DataTransfer` dispatched
+  to the actual file input, same technique as the original discovery) and confirmed both edges now render
+  immediately, with the disabled badge and the param-override dot also correctly preserved. New regression
+  coverage: `src/data/nodeDefaults.test.ts` (2 tests, the shape of `defaultNodeHandles`) and a 10th test in
+  `src/utils/importCanvasSnapshot.test.ts` (every imported node carries exactly the 4 expected handle ids with
+  finite coordinates) - the render-time behavior itself is browser-only and can't be jsdom-tested, same
+  established split as every other React-Flow-interaction-dependent behavior in this project. Test suite grew
+  from 78 to 81.

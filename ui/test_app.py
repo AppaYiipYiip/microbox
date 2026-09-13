@@ -22,7 +22,6 @@ Run with: .venv-ui/bin/pytest ui/test_app.py -v
 
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -99,7 +98,11 @@ def test_live_run_reattachment_shows_in_progress_and_cancel_button():
         at.run()
 
         assert not at.exception
-        assert any(f"PID {proc.pid}" in i.value and "still in progress" in i.value for i in at.info)
+        # No longer asserts on a raw PID in the message text - owner
+        # 2026-09-13 feedback ("wasted space"/"complicated paths") led to
+        # dropping the bare process id from the user-facing message; it's
+        # still real, just no longer surfaced as this dev-only detail.
+        assert any("still in progress" in i.value for i in at.info)
         assert any(b.key == "cancel_reattached" for b in at.button)
     finally:
         proc.terminate()

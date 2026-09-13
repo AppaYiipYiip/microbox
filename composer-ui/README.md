@@ -28,8 +28,11 @@ actually clicking through it, not from re-reading the requirements:
   yet; Composer (`/composer`) — the canvas; **Run Pipeline** (`/run`) — added 2026-09-13, embeds the real,
   separate Streamlit launcher (`ui/app.py`) via Vite's dev-server proxy (`/run-app` -> the Streamlit port,
   `vite.config.ts`) so it's reachable on this same port/nav rather than a separate URL - this is the one page
-  that actually runs the pipeline, Composer's own Run button stays disabled; Run History (`/history`) — a
-  placeholder proving the route works.
+  that actually runs the pipeline, Composer's own Run button stays disabled; **Run History** (`/history`) —
+  no longer a placeholder as of 2026-09-13, shows the real, latest MultiQC report the pipeline produced,
+  embedded directly (`src/pages/HistoryPage.tsx` + `serve-results-plugin.ts`, a dev-server-only Vite plugin
+  serving the real `results/` directory as same-origin URLs) - no filesystem/WSL path ever shown, an honest
+  empty state if no run has completed yet, and a manual Refresh button.
 - A categorized, draggable node palette listing this pipeline's real tools (`src/data/toolCatalog.ts` mirrors
   `workflows/microbox.nf`'s actual stages — fastp, FastQC, Bowtie2, MEGAHIT, metaSPAdes, Kraken2, Bracken,
   QUAST, geNomad, CheckV, MaxBin2, MultiQC — not invented examples). Also includes **Pavian**
@@ -265,7 +268,7 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 86 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 90 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4

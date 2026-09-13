@@ -40,7 +40,13 @@ def _pid_alive(pid: int) -> bool:
         return False
     return True
 
-st.set_page_config(page_title="microbox", page_icon="\U0001f9ec", layout="centered")
+# layout="wide" (was "centered") - owner 2026-09-13: "so much wasted space".
+# Streamlit's "centered" layout fixes content to a narrow, ~730px column
+# regardless of window width, leaving large empty margins on wide screens -
+# especially noticeable once this page is itself embedded as a full-height
+# iframe inside composer-ui (RunPipelinePage.tsx) rather than viewed as its
+# own standalone browser tab.
+st.set_page_config(page_title="microbox", page_icon="\U0001f9ec", layout="wide")
 st.title("microbox")
 st.caption("Drop a samplesheet, click Run, open the report when it's done.")
 
@@ -157,13 +163,16 @@ def status_panel() -> None:
             except ValueError:
                 pid = None
             if pid is not None and _pid_alive(pid):
-                st.info(
-                    f"A run (PID {pid}) is still in progress, started from a different "
-                    "session - this page will keep checking while it's open."
-                )
+                st.info("A run is still in progress, started from a different session - this page will keep checking while it's open.")
+                # Raw Nextflow output (container pull logs, work-directory
+                # paths, etc.) - real, but not meant for a first glance;
+                # owner 2026-09-13: "i dont understand the complicated wsl
+                # paths like that". Opt-in via an expander, same pattern used
+                # everywhere else in this file this pass touches.
                 if LOG_PATH.exists():
-                    tail = LOG_PATH.read_text(errors="ignore")[-3000:]
-                    st.code(tail or "(no output yet)", language="text")
+                    with st.expander("Technical details (raw pipeline output)"):
+                        tail = LOG_PATH.read_text(errors="ignore")[-3000:]
+                        st.code(tail or "(no output yet)", language="text")
                 if st.button("Cancel this run", key="cancel_reattached"):
                     _cancel_run(pid)
                     st.rerun()
@@ -250,10 +259,16 @@ def status_panel() -> None:
             st.caption(debug_result.stderr)
 
     if return_code == 0 and MULTIQC_REPORT.exists():
-        st.success("Report ready.")
+        st.success("Report ready - also available anytime from the Run History page.")
         st.components.v1.html(MULTIQC_REPORT.read_text(errors="ignore"), height=800, scrolling=True)
     elif return_code == 0:
-        st.warning(f"Run finished but no report found at {MULTIQC_REPORT}.")
+        # No raw filesystem path in the message - owner 2026-09-13: "i dont
+        # expect nontechnical people to have to access a path... like that."
+        # The real path is still in "Technical details" for anyone who does
+        # want it.
+        st.warning("Run finished, but no report was produced.")
+        with st.expander("Technical details"):
+            st.code(str(MULTIQC_REPORT), language="text")
 
 
 status_panel()

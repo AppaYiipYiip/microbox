@@ -4,7 +4,13 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**The composer and the real pipeline launcher now share one port** - Vite's dev
+Last updated: 2026-09-13 (**Run History is now a real page (the MultiQC report embedded, no WSL path ever
+shown) and the Run Pipeline page's wasted-space layout/leaked technical detail fixed** - `ui/app.py` now uses
+`layout="wide"` and hides raw process ids/paths behind a "Technical details" expander; a new dev-server-only
+Vite plugin (`serve-results-plugin.ts`) serves the real pipeline's `results/` directory as same-origin URLs
+so Run History (`HistoryPage.tsx`) can embed the finished report directly. Test suite: 86 → 90. See "Run
+History is now a real page..." below.
+**The composer and the real pipeline launcher now share one port** - Vite's dev
 server proxies `/run-app` through to the Streamlit launcher (`bin/run-ui.sh`, now started with
 `--server.baseUrlPath run-app`), and a new "Run Pipeline" nav page embeds it as an iframe, so
 `http://localhost:5173/run` is the real, functioning launcher - no more separate port/URL. Test suite: 84 →
@@ -984,3 +990,45 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   (not a static screenshot - the Environment dropdown genuinely opens and lists all 4 real environments,
   confirming the proxied WebSocket connection is live), and `http://localhost:5173/composer` still works
   unaffected.
+
+- **Run History is now a real page (the MultiQC report embedded, no filesystem path ever shown), and the Run
+  Pipeline page's own layout fixed, 2026-09-13** (owner, after actually using both real pages just added: "i
+  dont like the run pipeline webpage when it comes to the ui... so much wasted space i dont understand the
+  complicated wsl paths like that. and also more visibility... the full interactive report should also be on
+  the app website somehow. i dont expect nontechnical people to have to access a path in wsl like that. i
+  assume we can read the content of the report in a dedicated page added via navigation sidebar"). Two
+  separate real problems, not one:
+  1. **`ui/app.py`'s own layout wasted space and leaked raw technical detail by default.** `st.set_page_config`
+     used `layout="centered"` - Streamlit's default narrow (~730px) fixed column, regardless of window
+     width - especially wasteful once this page is itself embedded as a full-height iframe (the 2026-09-13
+     "share one port" work above). Changed to `layout="wide"`. Separately, the reattached-run status message
+     and the "run finished, no report" message both put raw detail in front of every viewer by default - a
+     bare process id, and a full filesystem path (`f"Run finished but no report found at {MULTIQC_REPORT}."`,
+     literally printing something like `/home/marouane/microbox/results/multiqc/multiqc_report.html`). Real,
+     technical, occasionally useful - but not what a non-technical viewer should see by default. Moved behind
+     a collapsed `st.expander("Technical details")`, matching the pattern `bin/debug.sh`'s own output already
+     uses elsewhere in this file for exactly this reason. `ui/test_app.py`'s one test that asserted on the
+     literal `f"PID {proc.pid}"` substring updated to check for the surrounding message text instead, since
+     the id itself is intentionally no longer shown.
+  2. **The real report had no way to reach the viewer except a raw WSL filesystem path** - true even after the
+     "share one port" work above, since that only embedded the *launcher* (upload + Run), not a place to
+     browse a *finished* result independent of having watched it complete in the same session. Fixed by making
+     Run History (`src/pages/HistoryPage.tsx`) a real page instead of PLAN.md §6.16's original placeholder: a
+     new dev-server-only Vite plugin (`serve-results-plugin.ts`) serves the real pipeline's `results/`
+     directory (`workflows/microbox.nf`'s own `publishDir` target, a sibling directory one level up from
+     `composer-ui/`) as same-origin URLs under `/reports/*` - `fetch('/reports/multiqc/multiqc_report.html',
+     { method: 'HEAD' })` on mount tells the page whether a report exists (and its `Last-Modified` timestamp)
+     without a filesystem path ever being constructed or shown anywhere in the UI; an honest empty state shows
+     if none exists yet, with a manual Refresh button since there's no way to push a "run just finished" event
+     from a separate Python process into this page. Same dev-server-only caveat as the Streamlit proxy - a
+     real production deployment needs an actual server doing this job (PLAN.md §6.12's still-open
+     UI-to-backend scope), not a Vite dev plugin.
+  **Verified for real, not just written**: re-ran the real ZymoBIOMICS pipeline test from the entry above,
+  confirmed `http://localhost:5173/history` picked up the resulting `multiqc_report.html` automatically
+  (correct generated-at timestamp, real report content rendering - General Stats, CheckV/geNomad/MaxBin2/QUAST
+  sections all present and interactive), and confirmed `http://localhost:5173/run`'s own already-existing
+  "report exists on disk" recovery message (Fixed #21, unrelated to this pass) now renders inside a visibly
+  wider layout instead of a narrow centered column. New test coverage: `src/pages/HistoryPage.test.tsx` (4
+  tests - empty state, found state with timestamp, Refresh re-fetches, fetch failure falls back to the empty
+  state honestly) plus `ui/test_app.py`'s updated assertion. Test suite: 86 → 90 (composer-ui) + 8 (unchanged,
+  `ui/test_app.py`).

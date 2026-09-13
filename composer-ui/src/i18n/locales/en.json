@@ -58,7 +58,11 @@
   },
   "history": {
     "title": "Run History",
-    "placeholder": "This page is a placeholder - it is not yet connected to real pipeline runs (PLAN.md §6.16 is requirements/prototype only)."
+    "refresh": "Refresh",
+    "checking": "Checking for a report...",
+    "placeholder": "No run has completed yet. Once a run finishes on the Run Pipeline page, its report will show up here automatically.",
+    "generatedAt": "Report generated {{date}}",
+    "reportTitle": "Pipeline report"
   },
   "categories": {
     "qc": "Read QC & Trimming",

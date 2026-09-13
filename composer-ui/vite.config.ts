@@ -1,10 +1,11 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { serveResults } from './serve-results-plugin.js'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), serveResults()],
   server: {
     proxy: {
       // Proxies the real, functioning Streamlit launcher (bin/run-ui.sh, a

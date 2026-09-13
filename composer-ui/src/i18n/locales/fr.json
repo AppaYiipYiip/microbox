@@ -58,7 +58,11 @@
   },
   "history": {
     "title": "Historique des analyses",
-    "placeholder": "Cette page est un espace réservé - elle n'est pas encore connectée aux analyses réelles du pipeline (PLAN.md §6.16 est uniquement au stade des exigences et du prototype)."
+    "refresh": "Actualiser",
+    "checking": "Recherche d'un rapport...",
+    "placeholder": "Aucune analyse n'est encore terminée. Une fois une analyse terminée depuis la page Lancer le pipeline, son rapport apparaîtra ici automatiquement.",
+    "generatedAt": "Rapport généré le {{date}}",
+    "reportTitle": "Rapport du pipeline"
   },
   "categories": {
     "qc": "Contrôle qualité et découpage des lectures",

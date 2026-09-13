@@ -100,21 +100,22 @@ actually clicking through it, not from re-reading the requirements:
   `~/microbox-dbs/kraken2/viral` and the node's override dot appeared, confirming it's a real, working
   update to that node's actual param, not a cosmetic suggestion.
 - **Auto-arrange** (PLAN.md §6.16 canvas nice-to-have: "auto-layout/auto-arrange") — a toolbar button that
-  lays every node out left-to-right in columns based on its connections (`src/utils/autoLayout.ts`, pure,
-  unit-tested). Hand-rolled instead of a graph-layout library (dagre/elkjs) - this toolbox is bounded to
-  ~20 nodes (PLAN.md §6.7/§6.10's own framing), and a real dependency decision (which library, its bundle-
-  size cost, one more thing to keep updated) isn't worth it for a layout this simple. Each node's column is
-  the LONGEST path from any root to it (so a node fed by two branches at different depths lands after both,
-  never overlapping a predecessor); a node with no incoming edges is column 0 - a normal, valid starting
-  point on this canvas (every reads-stage in the real pipeline is independently skippable), not an error
-  case. The composer doesn't forbid drawing a cycle even though the real pipeline can't execute one
-  (`src/utils/validatePipeline.ts` already flags that separately) - a cycle can't be topologically layered
-  by definition, so any node still unresolved once nothing else can move is placed in column 0 alongside the
-  real roots, rather than looping forever. Only repositions nodes - never touches connections, params, or
-  enabled state - and takes a history snapshot first like every other mutation here. **Verified live
-  in-browser**: two nodes dropped at scattered positions and connected, then Auto-arrange placed them at
-  exactly `(0, 0)` and `(260, 0)` (confirmed via each node's actual CSS transform, not just eyeballed) - one
-  press of Undo restored their original scattered positions exactly.
+  lays every node out top-to-bottom in rows based on its connections (`src/utils/autoLayout.ts`, pure,
+  unit-tested). Vertical, matching a real reference pipeline diagram the owner's R&D team provided (2026-09-13)
+  - the layout was originally left-to-right, corrected once the owner asked for it to match that diagram's
+  shape. Hand-rolled instead of a graph-layout library (dagre/elkjs) - this toolbox is bounded to ~20 nodes
+  (PLAN.md §6.7/§6.10's own framing), and a real dependency decision (which library, its bundle-size cost, one
+  more thing to keep updated) isn't worth it for a layout this simple. Each node's row is the LONGEST path
+  from any root to it (so a node fed by two branches at different depths lands after both, never overlapping
+  a predecessor); a node with no incoming edges is row 0 - a normal, valid starting point on this canvas
+  (every reads-stage in the real pipeline is independently skippable), not an error case. The composer doesn't
+  forbid drawing a cycle - a cycle can't be topologically layered by definition, so any node still unresolved
+  once nothing else can move is placed in row 0 alongside the real roots, rather than looping forever. Only
+  repositions nodes - never touches connections, params, or enabled state - and takes a history snapshot
+  first like every other mutation here. **Verified live in-browser**: two nodes dropped at scattered positions
+  and connected, then Auto-arrange placed them at exactly `(0, 0)` and `(0, 120)` (confirmed via each node's
+  actual CSS transform, not just eyeballed) - one press of Undo restored their original scattered positions
+  exactly.
 - A React Flow canvas (`src/components/PipelineCanvas.tsx`, `colorMode="dark"`) — drag a tool from the
   palette, drop it on the canvas, connect nodes, click to select (a floating detail panel over the canvas,
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,
@@ -168,26 +169,22 @@ actually clicking through it, not from re-reading the requirements:
   (`multiSelectionActive`/`useKeyPress`), which a single click's `ctrlKey` flag never fires. Confirmed
   multi-select genuinely works by dispatching real `keydown`/`keyup` events around the clicks instead - a
   real user physically holding Ctrl hits the real listener, this only affects automated click simulation.
-- **Connections are validated against what the real pipeline can actually execute** (owner, 2026-09-13,
-  after asking about a saved canvas: "doesnt each node have a set of parametres... i see only input field
-  for paths" led into a bigger realization - the canvas let you draw connections the real fixed-backbone
-  pipeline structurally cannot run, e.g. QUAST → MaxBin2, or MEGAHIT → Kraken2 which looks plausible but
-  isn't real - fastq-entry Kraken2 always classifies reads, never an assembler's contigs). `src/data/
-  pipelineTopology.ts` is a hardcoded "what can actually feed what" map, grounded directly in
-  `workflows/microbox.nf`'s real channel wiring (every entry cites the specific behavior it's based on, not
-  guessed from tool names) - `src/utils/validatePipeline.ts` (unit-tested) checks every drawn edge against
-  it. Invalid connections render as a dashed amber line on the canvas (instead of the normal solid one) and
-  are listed in a warning banner above the canvas, translated, non-blocking (Save/interaction still work
-  fine - Run is already disabled for other reasons). Deliberately does **not** check whether a node has ALL
-  the inputs it needs (MaxBin2 genuinely requires both a contigs edge AND a reads edge simultaneously - a
-  node fed only one would still fail for real) - a known, documented gap, not an oversight; this pass only
-  checks "is each individual drawn connection real," which is what was asked for and what caught the actual
-  mistake in a real user-drawn graph. Verified live in-browser: recreating the user's own QUAST → MaxBin2
-  connection renders the dashed-amber edge and the exact warning text, in real time as the edge is drawn.
-  **Updated 2026-09-13** once `workflows/microbox.nf` genuinely grew a new branch to match: fastp/FastQC ->
-  Kraken2 is now valid too (a real, independent pre-depletion classification pass, `params.
-  skip_kraken2_predepletion` - see `docs/KNOWN_ISSUES.md`'s dated entry), alongside the pre-existing
-  Bowtie2 -> Kraken2.
+- **Connections are NOT restricted to what the real pipeline can currently execute** - deliberately, as of
+  2026-09-13. An earlier pass (same day) built exactly the opposite: a hardcoded "what can actually feed
+  what" map (`src/data/pipelineTopology.ts`) checked against `workflows/microbox.nf`'s real channel wiring,
+  flagging mismatches with a dashed-amber edge and a warning banner. Removed after real use revealed the
+  actual cost: every mismatch it caught (FastQC → fastp, QUAST → MaxBin2) needed real investigation to tell
+  apart "the composer found a genuine mistake" from "the composer is comparing a forward-looking design
+  against code that hasn't caught up yet, or a reference diagram that's just one example, not a literal spec"
+  - and the owner's own R&D reference pipeline kept landing in the second bucket. Owner's call once that
+  pattern was clear: "we allow the user to do whatever they want no need for warning" - the composer is a
+  free-form design tool, not a gate against the current pipeline implementation. The fixed-role handles
+  (top/left = incoming, right/bottom = outgoing) are still the only notion of "direction" enforced -
+  `src/utils/isValidConnection.ts` still rejects a same-role pair (genuinely ambiguous, not a real-pipeline
+  judgment call) and self-connections, but nothing checks a specific tool pair against `workflows/microbox.nf`
+  anymore. See `docs/KNOWN_ISSUES.md`'s dated entries for the full back-and-forth, including the real research
+  (nf-core/mag, Galaxy Training Network) that went into confirming QUAST → MaxBin2 genuinely isn't a real data
+  dependency (it stays uncaught now, by choice) before the check was removed anyway.
 - **Node state is visible on the canvas, not just in the detail panel** (PLAN.md §6.11's Pipeline-page
   refinement: "node state (enabled/skipped/incompatible-connection) needs to be visible, not just silently
   enforced," and "nodes need a visual distinction between default and user-overridden parameters"). Every
@@ -250,8 +247,7 @@ actually clicking through it, not from re-reading the requirements:
   remove a selected node and close its now-stale detail panel, real multi-select (Ctrl+click, using actual
   dispatched `keydown`/`keyup` events - see the testing-tool gotcha noted above) confirmed via the DOM to
   select both nodes, a drag of one multi-selected node confirmed to move the whole selection together, and
-  Delete confirmed to remove an entire multi-selection as a single undo step. Recreating the user's own
-  reported QUAST → MaxBin2 connection confirmed the dashed-amber edge and warning banner both appear, live.
+  Delete confirmed to remove an entire multi-selection as a single undo step.
   A disabled node with a set param confirmed to render dimmed with a "Skipped" badge and an override dot; a
   real Save→Import round trip (via a real `File`/`DataTransfer` dispatched to the actual file input, not
   simulated) confirmed every field survives exactly, and a deliberately malformed import confirmed to show a
@@ -260,16 +256,14 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 91 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 84 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
   handles with the correct fixed target/source roles, self-connection rejected by `isValidConnection`, the
   param-merge logic (`updateNodeParam`) correctly updates one node's one param without touching siblings, the
   undo/redo stack (`src/utils/history.ts`) round-trips correctly, discards redo on a new change, and caps its
-  length, `findInvalidEdges` (`src/utils/validatePipeline.ts`) accepts real dependencies and flags
-  connections that don't exist in the real pipeline (including two that look plausible but aren't - MEGAHIT
-  → Kraken2, metaSPAdes → MultiQC), `toggleNodeEnabled` flips only the targeted node, `ToolNode` renders the
+  length, `toggleNodeEnabled` flips only the targeted node, `ToolNode` renders the
   disabled/override-dot states correctly, and `parseCanvasSnapshot` (`src/utils/importCanvasSnapshot.ts`)
   round-trips a full snapshot, remaps ids, defaults missing fields sensibly, and rejects invalid JSON, the
   wrong format version, an unknown tool id, and structurally malformed nodes/edges, `matchesSearch`
@@ -321,13 +315,10 @@ there later; not yet included since this is still a prototype, not part of the s
   logical/viewport-independent scheme §6.11 flags as the standard fix for cross-screen-size portability
   (not yet a problem in practice since React Flow's canvas is itself pannable/zoomable and nothing here
   depends on absolute screen pixels, but worth revisiting if that ever changes).
-- **Validation is a warning, not enforcement** — any node can still be connected to any other node on the
-  canvas; invalid connections (per `src/data/pipelineTopology.ts`) get a dashed-amber edge and a banner
-  entry, but nothing blocks drawing or saving them. §6.10's confirmed requirement (the Bracken/contigs-report
-  bug) still isn't structurally prevented, just flagged.
-- **Validation checks individual edges only, not whether a node has ALL the inputs it needs** — e.g. MaxBin2
-  genuinely requires both a contigs edge and a reads edge simultaneously in the real pipeline; a MaxBin2 node
-  fed only one (even a "valid" one) would still fail for real, and the composer doesn't catch that yet.
+- **No connection is checked against what the real pipeline can actually execute** — any node can be
+  connected to any other, in any combination, with no warning of any kind (removed 2026-09-13, see "What's
+  actually built" above for why). §6.10's confirmed requirement (the Bracken/contigs-report bug) isn't
+  structurally prevented at all now, not even flagged - a deliberate choice, not an oversight.
 - **Home and Run History are honest placeholders** — real pages/routes, but no real run data, since there's
   no backend to report it from.
 - **Undo/redo doesn't cover every kind of edit** — node add/delete/duplicate/connect and node/selection drags

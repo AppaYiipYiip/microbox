@@ -3,19 +3,6 @@
   stroke-width: 2;
 }
 
-/* A connection that doesn't correspond to any real dependency in
-   workflows/microbox.nf (src/utils/validatePipeline.ts) - dashed amber
-   stays visible even while selected (the combined rule below), so the
-   warning doesn't disappear right when the user goes to delete it. */
-.deletable-edge--invalid {
-  stroke: #d97706;
-  stroke-dasharray: 6 4;
-}
-
-.deletable-edge--invalid.deletable-edge--selected {
-  stroke: #d97706;
-}
-
 .deletable-edge__delete {
   position: absolute;
   pointer-events: all;

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import {
   ReactFlow,
   Background,
@@ -15,7 +15,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useTranslation } from 'react-i18next'
 import { ToolNode, type ToolNodeType } from './ToolNode'
-import { DeletableEdge, type DeletableEdgeData } from './DeletableEdge'
+import { DeletableEdge } from './DeletableEdge'
 import { DRAG_DATA_FORMAT } from './NodePalette'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import { isValidConnection } from '../utils/isValidConnection'
@@ -51,7 +51,6 @@ export function PipelineCanvas({
   onNodeDragStart,
   onSelectionDragStart,
   onBeforeAddNode,
-  invalidEdgeIds,
 }: {
   nodes: ToolNodeType[]
   edges: Edge[]
@@ -72,10 +71,6 @@ export function PipelineCanvas({
   // Fired right before a palette drop adds a new node - the fourth history
   // entry point alongside onConnect/onBeforeDelete/onNodeDragStart above.
   onBeforeAddNode: () => void
-  // Edge ids that don't correspond to a real dependency in
-  // workflows/microbox.nf (src/utils/validatePipeline.ts, computed by
-  // ComposerPage). Purely a rendering overlay - see edgesWithValidity below.
-  invalidEdgeIds: Set<string>
 }) {
   const { t } = useTranslation()
   const { screenToFlowPosition } = useReactFlow()
@@ -114,25 +109,12 @@ export function PipelineCanvas({
 
   const onPaneClick = useCallback(() => onSelectNode(null), [onSelectNode])
 
-  // Injects `data.invalid` into a COPY of the edges array for rendering only
-  // - the real `edges` state (and therefore Save snapshots and undo/redo
-  // history) never carries this flag, since it's derived, not user data.
-  const edgesWithValidity = useMemo(
-    () =>
-      invalidEdgeIds.size === 0
-        ? edges
-        : edges.map((edge) =>
-            invalidEdgeIds.has(edge.id) ? { ...edge, data: { ...edge.data, invalid: true } satisfies DeletableEdgeData } : edge,
-          ),
-    [edges, invalidEdgeIds],
-  )
-
   return (
     <div className="pipeline-canvas">
       {nodes.length === 0 && <div className="pipeline-canvas__empty-hint">{t('composer.canvasEmptyHint')}</div>}
       <ReactFlow
         nodes={nodes}
-        edges={edgesWithValidity}
+        edges={edges}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         defaultEdgeOptions={{ type: 'deletable' }}

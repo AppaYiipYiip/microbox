@@ -12,12 +12,12 @@ function edge(id: string, source: string, target: string): Edge {
 }
 
 describe('computeAutoLayout', () => {
-  it('lays out a linear chain in increasing columns', () => {
+  it('lays out a linear chain in increasing rows, top to bottom', () => {
     const nodes = [node('a'), node('b'), node('c')]
     const edges = [edge('e1', 'a', 'b'), edge('e2', 'b', 'c')]
     const positions = computeAutoLayout(nodes, edges)
-    expect(positions.a.x).toBeLessThan(positions.b.x)
-    expect(positions.b.x).toBeLessThan(positions.c.x)
+    expect(positions.a.y).toBeLessThan(positions.b.y)
+    expect(positions.b.y).toBeLessThan(positions.c.y)
   })
 
   it('places a node fed by two branches after the DEEPER of its two ancestors (longest path)', () => {
@@ -28,15 +28,15 @@ describe('computeAutoLayout', () => {
     const positions = computeAutoLayout(nodes, edges)
     // c must land strictly after b, not merely after a, since b->c is the
     // longer of c's two incoming paths.
-    expect(positions.c.x).toBeGreaterThan(positions.b.x)
+    expect(positions.c.y).toBeGreaterThan(positions.b.y)
   })
 
-  it('gives every node with no incoming edges the same, first column', () => {
+  it('gives every node with no incoming edges the same, first row', () => {
     const nodes = [node('a'), node('b')]
     const positions = computeAutoLayout(nodes, [])
-    expect(positions.a.x).toBe(positions.b.x)
-    // Distinct rows so they don't render on top of each other.
-    expect(positions.a.y).not.toBe(positions.b.y)
+    expect(positions.a.y).toBe(positions.b.y)
+    // Distinct columns so they don't render on top of each other.
+    expect(positions.a.x).not.toBe(positions.b.x)
   })
 
   it('does not infinite-loop on a cycle - falls back to placing unresolved nodes in the first column', () => {

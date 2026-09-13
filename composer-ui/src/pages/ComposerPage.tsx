@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, type Connection, type Edge } from '@xyflow/react'
 import { NodePalette } from '../components/NodePalette'
@@ -9,7 +9,6 @@ import { updateNodeParam as mergeNodeParam } from '../utils/updateNodeParam'
 import { toggleNodeEnabled as toggleNodeEnabledInList } from '../utils/toggleNodeEnabled'
 import { nextNodeId } from '../utils/nodeId'
 import { EMPTY_HISTORY, pushSnapshot, undo as undoHistory, redo as redoHistory } from '../utils/history'
-import { findInvalidEdges } from '../utils/validatePipeline'
 import { parseCanvasSnapshot, type ImportError } from '../utils/importCanvasSnapshot'
 import { KRAKEN2_DB_VARIANTS, conventionalKraken2DbPath } from '../data/kraken2DbVariants'
 import { recommendKraken2Db } from '../utils/recommendKraken2Db'
@@ -17,11 +16,6 @@ import { estimateDeviceMemoryGiB } from '../utils/estimateDeviceMemory'
 import { computeAutoLayout } from '../utils/autoLayout'
 import { normalizeConnection } from '../utils/normalizeConnection'
 import './ComposerPage.css'
-
-function toolName(t: (key: string) => string, toolId: string): string {
-  const tool = TOOL_CATALOG.find((tl) => tl.id === toolId)
-  return tool ? t(tool.nameKey) : toolId
-}
 
 // React Flow's own per-node `.selected` boolean (what actually drives the
 // blue border/resize-handle overlay on the canvas, via NodeProps.selected)
@@ -94,16 +88,6 @@ function ComposerInner() {
   const [kraken2RamInput, setKraken2RamInput] = useState(() => (deviceMemoryGiB !== null ? String(deviceMemoryGiB) : ''))
   const kraken2RamGiB = Number.parseFloat(kraken2RamInput)
   const recommendedKraken2Db = Number.isFinite(kraken2RamGiB) && kraken2RamGiB > 0 ? recommendKraken2Db(kraken2RamGiB) : null
-
-  // Flags connections that don't correspond to any real dependency in
-  // workflows/microbox.nf (owner feedback 2026-09-13, after asking about a
-  // saved canvas: "doesnt each node have a set of parametres..." led into
-  // "how would we store the result" and surfaced that the composer let you
-  // draw graphs the real fixed-backbone pipeline can't execute - e.g. QUAST
-  // -> MaxBin2, which isn't a real data dependency). Purely informational -
-  // does not block Save/Run (Run is already disabled for other reasons).
-  const invalidEdges = useMemo(() => findInvalidEdges(nodes, edges), [nodes, edges])
-  const invalidEdgeIds = useMemo(() => new Set(invalidEdges.map((e) => e.edgeId)), [invalidEdges])
 
   // Undo/redo (owner feedback 2026-09-13: "many quality of life elements").
   // A snapshot is the canvas state right BEFORE the mutation about to be
@@ -450,21 +434,6 @@ function ComposerInner() {
           <p className="composer-page__warning-title">{t(`composer.importError.${importError}`)}</p>
         </div>
       )}
-      {invalidEdges.length > 0 && (
-        <div className="composer-page__warning" role="status">
-          <p className="composer-page__warning-title">
-            {t('composer.invalidConnections', { count: invalidEdges.length })}
-          </p>
-          <ul className="composer-page__warning-list">
-            {invalidEdges.map((invalid) => (
-              <li key={invalid.edgeId}>
-                {toolName(t, invalid.sourceToolId)} → {toolName(t, invalid.targetToolId)}
-              </li>
-            ))}
-          </ul>
-          <p className="composer-page__warning-hint">{t('composer.invalidConnectionsHint')}</p>
-        </div>
-      )}
       <div className="composer-page__layout">
         <div className="composer-page__canvas-area">
           <PipelineCanvas
@@ -479,7 +448,6 @@ function ComposerInner() {
             onNodeDragStart={takeSnapshot}
             onSelectionDragStart={takeSnapshot}
             onBeforeAddNode={takeSnapshot}
-            invalidEdgeIds={invalidEdgeIds}
           />
           {selectedNode && selectedTool && (
             <aside className="composer-page__detail" aria-label={t('composer.nodeSelected')}>

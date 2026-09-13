@@ -4,7 +4,13 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**A real new Nextflow pipeline branch: Kraken2 now also classifies reads BEFORE
+Last updated: 2026-09-13 (**Composer canvas: the real-pipeline connection validation was removed entirely**
+after real use showed it couldn't reliably tell a genuine mistake apart from a forward-looking design based
+on an example diagram - "we allow the user to do whatever they want no need for warning." Auto-arrange
+changed from left-to-right to top-to-bottom to match the reference diagram's shape. Test suite: 93 → 84
+(a real removal). See "Composer canvas: the 'connections don't match the real pipeline' validation
+REMOVED..." below.
+**A real new Nextflow pipeline branch: Kraken2 now also classifies reads BEFORE
 host depletion** (`--skip_kraken2_predepletion false`), a second, independent pass alongside the existing
 post-depletion one — added after the owner supplied a real reference pipeline diagram from their R&D team
 showing this as the primary classification path. Verified via 5 new `nf-test` cases plus all 24 pre-existing
@@ -889,3 +895,48 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   handle positions for not-yet-measured nodes - see the 2026-09-13 import-rendering fix above) kept in sync
   at the same value, since the two must match or the pre-measurement estimate would be slightly off from the
   real rendered position. Verified live: `getBoundingClientRect()` on a real rendered handle now reports 9px.
+
+- **Composer canvas: Auto-arrange changed from left-to-right to top-to-bottom, 2026-09-13** (owner: "for the
+  auto arrange button make it vertical. just like the picture i shared"). `src/utils/autoLayout.ts`'s
+  `computeAutoLayout` unchanged in algorithm (Kahn's-algorithm-style longest-path layering) - only which axis
+  each of the two already-computed numbers (layer depth, sibling index) maps to was swapped: layer depth now
+  drives `y` (rows growing downward) instead of `x` (columns growing rightward), sibling index now drives `x`
+  instead of `y`. Matches this app's own fixed handle roles (top/left = incoming, right/bottom = outgoing,
+  `HANDLE_SIDES`) - a layer's successors naturally land below it now, connecting out of its bottom handle,
+  same as the R&D reference diagram's own vertical flowchart shape. `autoLayout.test.ts`'s existing assertions
+  flipped to check `.y` instead of `.x` for depth-ordering and vice versa for same-layer siblings - no new
+  test cases needed, the algorithm's actual behavior (longest-path layering, cycle handling, rootless-node
+  handling) is unchanged and was already covered. Verified live: re-arranging the owner's own real 10-node
+  canvas (fastp/FastQC/Bowtie2/MEGAHIT/QUAST/MaxBin2/Kraken2/Pavian/geNomad/CheckV) now stacks top-to-bottom
+  exactly matching the reference diagram's shape.
+
+- **Composer canvas: the "connections don't match the real pipeline" validation REMOVED entirely, 2026-09-13**
+  (owner, after two separate real cases - FastQC → fastp, QUAST → MaxBin2 - both required real investigation
+  to resolve rather than being obvious bugs or obvious mistakes): "i guess we allow the user to do whatever
+  they want no need for warning." This reverses the feature built earlier the same day ("Composer canvas:
+  connections validated against the real pipeline's fixed backbone..."), after real use surfaced its actual
+  cost: it couldn't tell apart "the user drew a genuine mistake" (its original, real motivating case) from
+  "the user is sketching a forward-looking design the current pipeline code hasn't caught up to yet, based on
+  a reference diagram that was only ever meant as one example, not a literal spec" (owner, same day,
+  separately: "remember thats an example of a pipeline, we might add more elements more nodes to it... lets be
+  flexible"). Both ambiguous cases got real research before this decision, not just a shrug: nf-core/mag,
+  Galaxy Training Network, and Harvard Chan Bioinformatics Core training materials all confirmed FastQC is
+  standard practice run BOTH before and after trimming (neither the current pipeline's trimmed-only pass nor
+  the reference diagram's raw-only pass is itself the textbook design) - the owner explicitly declined adding
+  a second FastQC pass anyway ("if they want to run fastqc twice they would just add it again in the pipeline
+  twice... why would we do it for them"), confirming the real lesson here isn't "which order is correct" but
+  "don't build pipeline changes reactively from an example diagram." Separately, MaxBin2's own documented
+  inputs (its GitHub README, nf-core's module) confirmed it never takes QUAST's output - QUAST → MaxBin2
+  really was a genuine mistake, not a forward-looking design - but by then the broader decision (remove the
+  check entirely, for everyone) had already been made and applies here too.
+  **What changed**: deleted `src/data/pipelineTopology.ts`, `src/utils/validatePipeline.ts`,
+  `src/utils/validatePipeline.test.ts` entirely (9 tests removed with them) - not just hidden or disabled.
+  Removed the warning banner and its i18n keys (`invalidConnections_one/_other/Hint`) from `ComposerPage.tsx`,
+  the `invalidEdgeIds` prop and `edgesWithValidity` derived-edges logic from `PipelineCanvas.tsx`, and the
+  `data.invalid`/`deletable-edge--invalid` dashed-amber styling from `DeletableEdge.tsx`/`.css`. **What did
+  NOT change**: `src/utils/isValidConnection.ts` still rejects self-connections and same-role handle pairs
+  (target-to-target/source-to-source) - that check is about structural ambiguity in the fixed-handle-role
+  scheme itself (there's no way to infer a direction for a same-role pair), not a judgment about whether a
+  specific tool pairing matches the current pipeline, so it stayed. Test suite: 93 → 84 (9 removed, 0 added -
+  a real feature removal, not a refactor). Verified live: re-drawing the exact FastQC → fastp connection from
+  the owner's own saved canvas renders as a normal solid edge with no banner.

@@ -1,10 +1,17 @@
 import type { Edge } from '@xyflow/react'
 import type { ToolNodeType } from '../components/ToolNode'
 
-const COLUMN_WIDTH = 260
-const ROW_HEIGHT = 120
+// Spacing between siblings within the same layer (perpendicular to flow).
+const SIBLING_SPACING = 260
+// Spacing between layers, i.e. along the flow direction (top to bottom) -
+// owner feedback 2026-09-13: match the R&D reference diagram's vertical
+// flowchart shape, not the earlier left-to-right one. Matches this app's own
+// fixed handle roles (top/left = incoming from predecessor, right/bottom =
+// outgoing to successor, ToolNode.tsx/HANDLE_SIDES) - a layer's successors
+// naturally land below it, connecting out of its bottom handle.
+const LAYER_SPACING = 120
 
-// Computes a simple left-to-right layered layout - PLAN.md §6.16's canvas
+// Computes a simple top-to-bottom layered layout - PLAN.md §6.16's canvas
 // nice-to-have "auto-layout/auto-arrange." Deliberately hand-rolled instead
 // of pulling in a graph-layout library (dagre/elkjs): this toolbox is
 // bounded to ~20 nodes (PLAN.md §6.7/§6.10's own framing), and a real
@@ -12,20 +19,18 @@ const ROW_HEIGHT = 120
 // to keep updated) isn't worth it for a layout this simple. Each node gets
 // a "layer" - how many hops it is from a root, via the LONGEST path so a
 // node fed by two different-depth branches lands after both, never
-// overlapping a predecessor - and layers stack left to right.
+// overlapping a predecessor - and layers stack top to bottom.
 //
 // A node with no incoming edges is layer 0 - not an error case. Every
 // reads-stage in the real pipeline is independently skippable
 // (workflows/microbox.nf), so a rootless node is a normal, valid starting
 // point on this canvas, not evidence of a malformed graph.
 //
-// The composer doesn't forbid drawing a cycle, even though
-// src/utils/validatePipeline.ts already separately flags it as something
-// the real pipeline can't execute - a cycle can't be topologically
-// layered by definition. Any node still unresolved after every node whose
-// predecessors are already placed has been processed is dropped into
-// layer 0 alongside the real roots, rather than looping forever trying to
-// resolve an ordering that doesn't exist.
+// The composer doesn't forbid drawing a cycle - a cycle can't be
+// topologically layered by definition, so any node still unresolved after
+// every node whose predecessors are already placed has been processed is
+// dropped into layer 0 alongside the real roots, rather than looping
+// forever trying to resolve an ordering that doesn't exist.
 export function computeAutoLayout(nodes: ToolNodeType[], edges: Edge[]): Record<string, { x: number; y: number }> {
   const nodeIds = nodes.map((n) => n.id)
   const incoming = new Map<string, string[]>(nodeIds.map((id) => [id, []]))
@@ -65,7 +70,7 @@ export function computeAutoLayout(nodes: ToolNodeType[], edges: Edge[]): Record<
   const positions: Record<string, { x: number; y: number }> = {}
   for (const [l, ids] of byLayer) {
     ids.forEach((id, index) => {
-      positions[id] = { x: l * COLUMN_WIDTH, y: index * ROW_HEIGHT }
+      positions[id] = { x: index * SIBLING_SPACING, y: l * LAYER_SPACING }
     })
   }
   return positions

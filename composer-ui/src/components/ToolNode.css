@@ -24,3 +24,20 @@
   font-weight: 600;
   margin-top: 0.15rem;
 }
+
+.tool-node__handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid #141414;
+}
+
+/* Target (incoming) vs source (outgoing) get distinct colors so, with two
+   handles now sharing each side, it's visually clear which is which. */
+.tool-node__handle--target {
+  background: #7aa2f7;
+}
+
+.tool-node__handle--source {
+  background: #9ece6a;
+}

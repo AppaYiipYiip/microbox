@@ -29,6 +29,10 @@ actually clicking through it, not from re-reading the requirements:
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,
   not the default light one (a real legibility bug found in testing — the default `Controls` icons were
   unreadable against this app's dark background).
+- **Connect from any side, not just left-to-right** (`src/components/ToolNode.tsx`) — each node has both a
+  source and a target handle on all four sides (top/right/bottom/left), so a pipeline can branch vertically
+  as well as horizontally. Target handles are blue, source handles are green, offset slightly apart on each
+  side so both stay individually grabbable rather than exactly overlapping.
 - **Save and Run buttons** on the Composer toolbar. Save genuinely works client-side today — downloads a
   JSON snapshot of the canvas (node ids/types/positions/data, edge connections) via a `Blob` + `<a
   download>`. This is a real first step toward §6.11's full export/import fidelity requirement, not the
@@ -45,11 +49,14 @@ actually clicking through it, not from re-reading the requirements:
   including a node already on the canvas and the Save/Run buttons, the Run button's `disabled` state and
   reduced opacity confirmed directly via the DOM (not just visually assumed), the Save button's click handler
   executing without error, real client-side navigation between all three pages (URL genuinely changes each
-  time), and the zoom/fit-view controls' icons actually legible against the dark canvas.
-- `npm test` (Vitest + React Testing Library, 17 tests) — i18n key-structure parity between `en.json`/
+  time), the zoom/fit-view controls' icons actually legible against the dark canvas, and a real vertical
+  (bottom-to-top) connection drawn between two nodes and confirmed present in the rendered DOM (1 edge, 16
+  handles = 8 per node × 2 nodes).
+- `npm test` (Vitest + React Testing Library, 18 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
-  and route navigation actually swaps the rendered page for all three pages.
+  route navigation actually swaps the rendered page for all three pages, and every `ToolNode` renders a
+  source + target handle pair (with unique ids) on all four sides.
 - `npm run build` — a real production build succeeds.
 - `npx tsc -b` and `npm run lint` (oxlint) both clean.
 

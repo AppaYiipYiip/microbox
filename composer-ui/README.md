@@ -27,6 +27,12 @@ actually clicking through it, not from re-reading the requirements:
   (`bin/run-pavian.sh`), even though it's a standalone report viewer deliberately NOT wired into the Nextflow
   DAG (PLAN.md §6.6 item 2) — added 2026-09-13 at the owner's request ("i would love to see it in the
   pipeline"), since this catalog's job is representing every real tool the project has, not strictly the DAG.
+  The palette has a **search/filter box** (PLAN.md §6.16's node-palette nice-to-have) - matches against the
+  current UI language's translated tool name *and* description (`src/utils/paletteSearch.ts`, unit-tested),
+  so searching in French filters against the French text; categories with no matching tools are hidden
+  entirely rather than left as an empty header, and an honest "no tools match" message shows when nothing
+  does. Verified live in both languages, including the description-only match case (typing "kraken" also
+  surfaces Bracken and Pavian, since their descriptions mention Kraken2, not just the Kraken2 card itself).
 - A React Flow canvas (`src/components/PipelineCanvas.tsx`, `colorMode="dark"`) — drag a tool from the
   palette, drop it on the canvas, connect nodes, click to select (a floating detail panel over the canvas,
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,
@@ -160,8 +166,11 @@ actually clicking through it, not from re-reading the requirements:
   A disabled node with a set param confirmed to render dimmed with a "Skipped" badge and an override dot; a
   real Save→Import round trip (via a real `File`/`DataTransfer` dispatched to the actual file input, not
   simulated) confirmed every field survives exactly, and a deliberately malformed import confirmed to show a
-  clear error and leave the canvas untouched; Undo confirmed to recover the pre-import canvas.
-- `npm test` (Vitest + React Testing Library, 56 tests) — i18n key-structure parity between `en.json`/
+  clear error and leave the canvas untouched; Undo confirmed to recover the pre-import canvas. Palette
+  search confirmed live in both languages: typing "kraken" surfaces Kraken2/Bracken/Pavian (a description-
+  text match, not just the name) with every non-matching category hidden, clearing restores the full list,
+  and an unmatchable query shows the translated "no tools match" message.
+- `npm test` (Vitest + React Testing Library, 62 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
@@ -173,7 +182,9 @@ actually clicking through it, not from re-reading the requirements:
   → Kraken2, metaSPAdes → MultiQC), `toggleNodeEnabled` flips only the targeted node, `ToolNode` renders the
   disabled/override-dot states correctly, and `parseCanvasSnapshot` (`src/utils/importCanvasSnapshot.ts`)
   round-trips a full snapshot, remaps ids, defaults missing fields sensibly, and rejects invalid JSON, the
-  wrong format version, an unknown tool id, and structurally malformed nodes/edges.
+  wrong format version, an unknown tool id, and structurally malformed nodes/edges, `matchesSearch`
+  (`src/utils/paletteSearch.ts`) matches/rejects correctly and treats an empty query as matching everything,
+  and `NodePalette` filters to matching tools, hides empty categories, and shows the "no results" message.
 - `npm run build` — a real production build succeeds. **Note**: `npx tsc --noEmit` alone is not sufficient -
   it missed a real type error (`Object.fromEntries` losing type narrowing through a `.filter()`) that only
   `npm run build`'s `tsc -b` (project-reference build) caught, presumably a difference in which tsconfig each

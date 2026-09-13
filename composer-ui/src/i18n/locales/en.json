@@ -14,6 +14,9 @@
   "composer": {
     "title": "Pipeline Composer",
     "paletteTitle": "Tools",
+    "paletteSearchPlaceholder": "Search tools...",
+    "paletteSearchClear": "Clear search",
+    "paletteNoResults": "No tools match your search.",
     "canvasEmptyHint": "Drag a tool from the palette onto the canvas to add it to your pipeline.",
     "nodeSelected": "Selected node",
     "clearSelection": "Close",

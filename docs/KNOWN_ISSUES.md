@@ -19,6 +19,12 @@ edges shown dashed-amber plus a warning banner, non-blocking. Also confirmed the
 already faithfully mirrors the only real per-tool params (`host_fasta`/`kraken2_db`/`genomad_db`/
 `checkv_db` - all paths, verified against `nextflow.config` directly). See "Composer canvas: connections
 validated against the real pipeline's fixed backbone..." below.
+**Composer node palette search/filter added** (PLAN.md §6.16's nice-to-have, now that the catalog spans 13
+tools/7 categories) — matches the current UI language's translated text, hides empty categories, unit-tested
+plus verified live in both languages. Also noted a real automation constraint: browser download-confirmation
+prompts block while the owner is AFK, worked around by intercepting `URL.createObjectURL` for testing rather
+than clicking through to a real download. Test suite grew from 56 to 62. See "Composer node palette:
+search/filter..." and "Owner feedback: browser download-confirmation prompts..." below.
 **Composer canvas: node state visibility + a real Save/Import round trip** — worked from PLAN.md §6.11's own
 still-open Must-haves (enabled/skipped and default-vs-overridden param visibility on the canvas; a portable,
 faithful pipeline-configuration file). Found and fixed a real Save fidelity bug along the way (width/height
@@ -565,5 +571,30 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   is not sufficient verification for this project going forward, only a real `npm run build`. Test suite grew
   from 38 to 56 (18 new tests: `toggleNodeEnabled.test.ts`, `importCanvasSnapshot.test.ts`, and 4 new
   `ToolNode.test.tsx` cases for the disabled/override-dot rendering).
+
+- **Composer node palette: search/filter, 2026-09-13** (continuing "as per the plan" per the owner's
+  standing authorization, while AFK - PLAN.md §6.16's node-palette nice-to-have, "search/filter within the
+  palette," picked as the next well-scoped item now that the catalog has grown to 13 tools across 7
+  categories). `src/utils/paletteSearch.ts` (`matchesSearch`, pure, unit-tested) does a case-insensitive
+  substring match against the CURRENT language's translated tool name and description - not the English
+  source strings or raw tool id, so a French speaker searching in French matches French text. `NodePalette.tsx`
+  filters each category's tools against the live query, hides any category left with zero matches entirely
+  (rather than an empty header), and shows a translated "no tools match" message when nothing does at all.
+  **Verified live in-browser, in both languages**: typing "kraken" surfaced Kraken2, Bracken, and Pavian
+  together (a real description-text match, not just the literal "Kraken2" card - Bracken/Pavian's
+  descriptions both mention Kraken2), with every non-matching category hidden; typing "classification" in
+  French matched the French category name and Kraken2's French description; an unmatchable query showed
+  "Aucun outil ne correspond à votre recherche." / "No tools match your search."; the clear "×" button
+  restored the full list. Test suite grew from 56 to 62.
+
+- **Owner feedback: browser download-confirmation prompts block while AFK, 2026-09-13** ("continue, the only
+  issue is that when you download something i need to be here to press the yes on the confirmation
+  dialogue"). The browser-automation extension gates actual file downloads (e.g. clicking the Composer's
+  real Save button) behind a permission prompt, which nobody can answer while the owner is away - not a bug
+  in this project's code, a real constraint of the automation tooling used to test it. **Working around it
+  going forward, not fixing it** (nothing to fix - it's a legitimate safety gate): verify Save/export
+  behavior by intercepting `URL.createObjectURL` via a script and reading the `Blob` content directly (as
+  already done for the Save→Import round-trip test above), never by actually clicking the button through to
+  a real completed download. No functional change to the app.
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).

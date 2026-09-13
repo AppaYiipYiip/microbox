@@ -14,6 +14,9 @@
   "composer": {
     "title": "Compositeur de pipeline",
     "paletteTitle": "Outils",
+    "paletteSearchPlaceholder": "Rechercher des outils...",
+    "paletteSearchClear": "Effacer la recherche",
+    "paletteNoResults": "Aucun outil ne correspond à votre recherche.",
     "canvasEmptyHint": "Glissez un outil depuis la palette vers la zone de travail pour l'ajouter à votre pipeline.",
     "nodeSelected": "Nœud sélectionné",
     "clearSelection": "Fermer",

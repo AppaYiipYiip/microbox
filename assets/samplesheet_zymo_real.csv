@@ -1,0 +1,2 @@
+sample,fastq_1,fastq_2
+zymo_mock,/home/marouane/microbox-real-data/subsampled/zymo_R1.fastq.gz,/home/marouane/microbox-real-data/subsampled/zymo_R2.fastq.gz

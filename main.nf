@@ -72,7 +72,7 @@ workflow {
     lines << "- Work dir     : ${workflow.workDir}"
     lines << "- Nextflow     : ${workflow.nextflow.version} (build ${workflow.nextflow.build})"
     lines << ""
-    lines << "See also: ${params.outdir}/pipeline_info/ (execution_trace/_report/_timeline once -with-trace etc. are enabled, PLAN.md §6.2 layer 3-4) for per-task container tags/versions."
+    lines << "See also: ${params.outdir}/pipeline_info/ for the technical drill-down - execution_trace.txt / execution_report.html / execution_timeline.html / pipeline_dag.html (PLAN.md §6.2 layer 3-4), and software_versions.yml for the exact tool version each process actually ran (also shown as a table in the MultiQC report itself - Galaxy/nf-core provenance norm, researched 2026-09-11)."
 
     if (!workflow.success) {
         lines << ""
@@ -83,6 +83,17 @@ workflow {
         lines << '```'
         lines << "${workflow.errorReport}"
         lines << '```'
+        lines << ""
+        // Added 2026-09-11 (owner: "add debugging, to make fixing bugs
+        // easier") alongside bin/debug.sh - this report already tells you
+        // *that* it failed and roughly why (errorReport above), but
+        // finding the failed task's exact command/stderr/work-dir still
+        // meant manually grepping .nextflow.log by hand every time this
+        // session. bin/debug.sh automates that; pointing at it here means
+        // the next diagnosis step is discoverable from the one artifact
+        // every run always produces, not something you have to already
+        // know exists.
+        lines << "For the exact command that failed, its full stderr, and its work directory - run: `bin/debug.sh` (or `bin/debug.sh ${workflow.runName}` for this specific run)."
     }
 
     report.text = lines.join('\n') + '\n'

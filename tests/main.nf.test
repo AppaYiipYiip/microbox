@@ -36,6 +36,13 @@ nextflow_pipeline {
             // recognizes; only QUAST.out.results/report.tsv is - see
             // workflows/microbox.nf and docs/KNOWN_ISSUES.md).
             assert path("${outputDir}/multiqc/multiqc_data/multiqc_general_stats.txt").text.contains("quast")
+            // MultiQC has a native MEGAHIT module (content-sniffs any file
+            // for a " - MEGAHIT v" header, no special filename needed) -
+            // wired in 2026-09-11 after the owner asked whether "no matter
+            // what the last node is, we get a report" actually held.
+            // Verify MEGAHIT's own log genuinely reached MultiQC, not just
+            // that megahit/test.log exists on disk untouched.
+            assert path("${outputDir}/multiqc/multiqc_data/multiqc_general_stats.txt").text.toLowerCase().contains("megahit")
             // Kraken2/Bracken are opt-in (skip_kraken2 defaults true) - the
             // default run must NOT produce them, proving the skip flag
             // actually skips, not just defaults to "off" in name only.
@@ -44,6 +51,53 @@ nextflow_pipeline {
             // FAIR provenance record (PLAN.md §6.2/§7.2, crucial requirement)
             // must exist on every run, not just successful ones tested by hand.
             assert path("${outputDir}/run-report").list().size() > 0
+            // Tool-version provenance (added 2026-09-11, Galaxy/nf-core norm
+            // researched the same day: PLAN.md §7.2 promised "tool versions"
+            // as part of FAIR compliance, but nothing ever collected them -
+            // every module already emitted to the `versions` topic channel,
+            // nothing subscribed to it). Both outputs must exist and name at
+            // least the tools this exact test run used.
+            assert path("${outputDir}/pipeline_info/software_versions.yml").text.contains("fastp")
+            assert path("${outputDir}/pipeline_info/software_versions_mqc.yml").text.contains("megahit")
+            // Pipeline DAG - enabled by default 2026-09-11 (was listed in
+            // PLAN.md §6.2's debugging toolkit but never actually switched
+            // on; Galaxy/Snakemake both treat a topology diagram as a
+            // standard part of "what ran").
+            assert path("${outputDir}/pipeline_info/pipeline_dag.html").exists()
+        }
+    }
+
+    test("fastq: assembler=metaspades runs SPAdes --meta instead of MEGAHIT, QUAST/versions follow it") {
+        tag "basic"
+
+        when {
+            params {
+                outdir    = "$outputDir"
+                assembler = "metaspades"
+            }
+        }
+
+        then {
+            assert workflow.success
+            // MEGAHIT must NOT have run - proves this is a genuine either/or
+            // choice, not "metaspades" quietly doing nothing and the default
+            // assembler running anyway.
+            assert !path("${outputDir}/megahit").exists()
+            assert path("${outputDir}/metaspades/test.contigs.fa.gz").exists()
+            // QUAST works on whichever assembler actually produced contigs -
+            // same contigs-quality reporting either way, verified directly
+            // rather than assumed (2026-09-12: real ZymoBIOMICS data already
+            // confirmed the same principle at production scale, see
+            // docs/KNOWN_ISSUES.md).
+            assert path("${outputDir}/quast/test.tsv").exists()
+            assert path("${outputDir}/multiqc/multiqc_data/multiqc_general_stats.txt").text.contains("quast")
+            // MultiQC has NO native SPAdes/metaSPAdes module (verified
+            // 2026-09-12 against the full assembly-tool module list) -
+            // unlike MEGAHIT's log above, nothing sniffs test.spades.log for
+            // report content, so deliberately not asserting anything about
+            // it appearing in the MultiQC report. QUAST is what actually
+            // covers "any node can be last and still get a report" here.
+            assert path("${outputDir}/pipeline_info/software_versions.yml").text.contains("spades")
         }
     }
 
@@ -98,6 +152,254 @@ nextflow_pipeline {
             assert !path("${outputDir}/quast").exists()
             assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
             assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    // ============================================================
+    // fastp/FastQC/MEGAHIT independently skippable - added 2026-09-11.
+    // Before this, these three had NO skip_* flag at all and always ran
+    // unconditionally on the fastq entry point, which both undercounted the
+    // pipeline's real combinatorial space (owner: "with 6 unique tools I'd
+    // expect more than 16 tests") and meant the fastq entry point could
+    // never legitimately end on anything but Kraken2/QUAST. Recomputed
+    // combinatorics with these three now genuinely independent: 72 distinct
+    // behavioral configurations on the fastq entry point alone (2 fastp ×
+    // 2 fastqc × 2 host_removal × 3 effective megahit/quast joint states ×
+    // 3 effective kraken2/bracken joint states) + 4 on contigs = 76 total.
+    // Not exhaustively tested one-by-one here (76 full-pipeline Docker runs
+    // would be redundant given how orthogonal these flags are, and no
+    // major bioinformatics test suite - nf-core, Galaxy - does exhaustive
+    // combinatorial testing either); tested instead with the standard
+    // pairwise/boundary approach: every flag toggled independently at least
+    // once, every cascading interaction the code actually implements
+    // exercised at least once, matching the density already established
+    // for skip_kraken2/skip_bracken above.
+    // ============================================================
+
+    test("fastq: skip_fastp=true - FastQC/host-depletion/assembly run on RAW reads, not trimmed") {
+        tag "basic"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                skip_fastp = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/fastp").exists()
+            assert path("${outputDir}/fastqc").exists()
+            assert path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    test("fastq: skip_fastqc=true - everything else runs unaffected") {
+        tag "basic"
+
+        when {
+            params {
+                outdir      = "$outputDir"
+                skip_fastqc = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/fastp").exists()
+            assert !path("${outputDir}/fastqc").exists()
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+        }
+    }
+
+    test("fastq: skip_megahit=true - QUAST auto-skips too (nothing to QC), rest of the pipeline unaffected") {
+        tag "basic"
+
+        // The cascading half of the new flag: QUAST needs contigs, and
+        // skip_megahit=true means none exist. workflows/microbox.nf catches
+        // this with a log.warn + automatic skip, not a hard failure or a
+        // silent run against an empty channel - same "inapplicable
+        // combination made to not-happen automatically" pattern already
+        // used for skip_host_removal-on-contigs and Bracken-on-contigs.
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_megahit = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/megahit").exists()
+            assert !path("${outputDir}/quast").exists()
+            assert path("${outputDir}/fastp").exists()
+            assert path("${outputDir}/fastqc").exists()
+            assert path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    test("fastq: skip_megahit=true with skip_quast=false explicitly - still auto-skips, doesn't crash on the contradiction") {
+        tag "basic"
+
+        // Same guard as above, but proves it holds even when the caller
+        // explicitly asks for QUAST rather than relying on its default -
+        // the auto-skip must win either way, not just when skip_quast was
+        // left at its default.
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_megahit = true
+                skip_quast   = false
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/quast").exists()
+        }
+    }
+
+    test("fastq: everything optional off - fails with the same clear message as the contigs degenerate case, not a MultiQC crash") {
+        tag "basic"
+
+        // The fastq-entry mirror of the existing contigs "nothing enabled"
+        // test below - only reachable at all once fastp/FastQC/MEGAHIT
+        // became independently skippable (2026-09-11). Proves the guard in
+        // workflows/microbox.nf covers both entry points, not just contigs.
+        when {
+            params {
+                outdir             = "$outputDir"
+                skip_fastp         = true
+                skip_fastqc        = true
+                skip_host_removal  = true
+                skip_megahit       = true
+                skip_kraken2       = true
+                skip_quast         = true
+            }
+        }
+
+        then {
+            assert !workflow.success
+            assert workflow.stdout.toString().contains("Nothing enabled to analyze or report")
+        }
+    }
+
+    test("fastq: everything except Kraken2 off - the fastq-entry equivalent of the contigs single-node case") {
+        tag "requires_db"
+
+        // Mirrors "contigs: Kraken2 alone" below, but for the fastq entry
+        // point: fastp/FastQC/host-depletion/MEGAHIT/QUAST all off, only
+        // Kraken2 (classifying the raw, undepleted, untrimmed reads) plus
+        // MultiQC remain. The narrowest possible real analysis this entry
+        // point can express.
+        when {
+            params {
+                outdir             = "$outputDir"
+                skip_fastp         = true
+                skip_fastqc        = true
+                skip_host_removal  = true
+                skip_megahit       = true
+                skip_kraken2       = false
+                kraken2_db         = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+                skip_quast         = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/fastp").exists()
+            assert !path("${outputDir}/fastqc").exists()
+            assert !path("${outputDir}/bowtie2").exists()
+            assert !path("${outputDir}/megahit").exists()
+            assert !path("${outputDir}/quast").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").text.trim().length() > 0
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    test("fastq: geNomad + CheckV find and grade the real virus in the toy fixture") {
+        tag "requires_db"
+
+        // The toy fixture is a genuine SARS-CoV-2 genome fragment (nf-core's
+        // own sarscov2 test-datasets), so this isn't a mechanics-only check
+        // the way the tiny Kraken2 viral-DB test above is - geNomad is
+        // expected to actually find and correctly taxonomically classify
+        // real viral sequence here, verified 2026-09-12: 7 contigs
+        // consistently come back tagged down to family level
+        // (Coronaviridae), and CheckV grades them Low-quality genome
+        // fragments (correct - each is a few hundred bp of a ~30kb genome)
+        // with zero contamination. Needs `bin/download-dbs.sh genomad` and
+        // `bin/download-dbs.sh checkv` run first (real DBs, ~5GB/~1.6GB) -
+        // same "not part of the zero-setup basic suite" reasoning as
+        // Kraken2's requires_db tests. Also needs the scoped
+        // `resourceLimits` override on GENOMAD_ENDTOEND in conf/test.config
+        // - found the hard way 2026-09-12 that geNomad's mmseqs2 marker
+        // search SIGKILLs under the profile's general 6GB cap even with
+        // --splits applied (conf/modules.config); a `withName`-scoped
+        // override raises the ceiling only for this one process rather than
+        // eroding the general cap's guarantee of working on weaker dev
+        // machines (PLAN.md §1.1).
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_genomad = false
+                genomad_db   = "${System.getenv('HOME')}/microbox-dbs/genomad/genomad_db"
+                skip_checkv  = false
+                checkv_db    = "${System.getenv('HOME')}/microbox-dbs/checkv/checkv-db-v1.5"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/genomad/test/test.contigs_summary/test.contigs_virus_summary.tsv").text.contains("Coronaviridae")
+            assert path("${outputDir}/checkv/test/quality_summary.tsv").text.contains("checkv_quality")
+            assert path("${outputDir}/pipeline_info/genomad_summary_mqc.yml").text.contains("n_viruses")
+            assert path("${outputDir}/pipeline_info/checkv_summary_mqc.yml").text.contains("n_viruses_assessed")
+        }
+    }
+
+    test("fastq: skip_maxbin2=false bins the assembly into per-organism clusters (real bacterial fixture)") {
+        tag "basic"
+
+        // Needs a DIFFERENT samplesheet than every other "basic" test here:
+        // this project's shared toy fixture is a real SARS-CoV-2 (viral)
+        // genome fragment, which is exactly wrong for MaxBin2 - verified the
+        // hard way 2026-09-13, running the real container directly outside
+        // Nextflow first: MaxBin2's internal marker-gene step (FragGeneScan,
+        // which expects bacterial-style ORFs) crashes outright on it
+        // ("Error running FragGeneScan... make sure you are running
+        // FragGeneScan 1.18 or above"), unrelated to this pipeline's own
+        // wiring. nf-core's own maxbin2 module test uses a small real
+        // bacterial fixture for exactly this reason (bacteroides_fragilis,
+        // nf-core/test-datasets) - reused here rather than inventing a new
+        // one, confirmed reachable (HTTP 200) and confirmed end-to-end
+        // (fresh MEGAHIT assembly of these exact reads -> MaxBin2 binning,
+        // both run manually outside Nextflow first) before writing this
+        // test, matching this project's "verify real behavior, don't guess"
+        // standard.
+        when {
+            params {
+                outdir       = "$outputDir"
+                input        = "${projectDir}/assets/samplesheet_maxbin2_test.csv"
+                skip_maxbin2 = false
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/maxbin2/bfrag.summary").exists()
+            // Real content, not just "the file exists" (this project's own
+            // established rule, Fixed #13/#15) - MaxBin2's summary is a
+            // tab-separated Bin name/Completeness/Genome size/GC content
+            // table; asserting the header proves this is a genuine MaxBin2
+            // summary, not an empty or truncated file.
+            assert path("${outputDir}/maxbin2/bfrag.summary").text.contains("Completeness")
+            assert path("${outputDir}/maxbin2/bfrag.001.fasta.gz").exists()
+            assert path("${outputDir}/pipeline_info/maxbin2_summary_mqc.yml").text.contains("n_bins")
         }
     }
 
@@ -239,7 +541,192 @@ nextflow_pipeline {
         then {
             assert workflow.success
             assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            // Not just "the file exists" - docs/KNOWN_ISSUES.md #15: a real
+            // bug (uncompressed contigs silently gzip-decompress-failing
+            // inside kraken2, --gzip-compressed being unconditional in the
+            // vendored module) produced an empty-but-existing report here,
+            // undetected until a single-node run isolated it. Same class of
+            // "file exists on disk != real data reached the pipeline" gap
+            // as #13 (QUAST/MultiQC). Guard against regressing.
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").text.trim().length() > 0
             assert !path("${outputDir}/bracken").exists()
+        }
+    }
+
+    // ============================================================
+    // Toolbox combinatorics sweep (owner, 2026-09-11): "how many unique
+    // combinations are possible, and does a single-node pipeline (e.g.
+    // Kraken2 alone) actually work?" The engine is a fixed backbone with 4
+    // independent toggles (skip_host_removal, skip_kraken2, skip_bracken,
+    // skip_quast) rather than a freely-reorderable graph (§6.10 Option A) -
+    // FASTP/FASTQC/MEGAHIT have no skip_* flag and always run for
+    // input_type=fastq. That makes the behaviorally-distinct space small
+    // and enumerable: 12 fastq-entry configurations + 4 contigs-entry
+    // configurations = 16 total. Everything above already covers 10 of
+    // those 16 (6 basic + 4 requires_db). These 6 fill the remaining gap -
+    // including the one the toolbox model explicitly promises must work:
+    // a single-tool pipeline (Kraken2 alone, nothing upstream or
+    // downstream but MultiQC).
+    // ============================================================
+
+    test("fastq: host removal + Kraken2 + Bracken, QUAST off - assembly branch fully idle") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_kraken2 = false
+                skip_quast   = true
+                kraken2_db   = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert path("${outputDir}/bracken/test.tsv").exists()
+            assert !path("${outputDir}/quast").exists()
+            // MEGAHIT itself is NOT independently skippable (no skip_megahit
+            // flag exists) - it always runs for input_type=fastq regardless
+            // of skip_quast, so its output must still be present even though
+            // nothing consumes it for reporting.
+            assert path("${outputDir}/megahit/test.contigs.fa.gz").exists()
+        }
+    }
+
+    test("fastq: host removal + Kraken2 only (Bracken and QUAST both off) - narrowest fastq-entry classification run") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir       = "$outputDir"
+                skip_kraken2 = false
+                skip_bracken = true
+                skip_quast   = true
+                kraken2_db   = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert !path("${outputDir}/bracken").exists()
+            assert !path("${outputDir}/quast").exists()
+        }
+    }
+
+    test("fastq: no host removal, Kraken2 + Bracken, QUAST off") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir            = "$outputDir"
+                skip_host_removal = true
+                skip_kraken2      = false
+                skip_quast        = true
+                kraken2_db        = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert path("${outputDir}/bracken/test.tsv").exists()
+            assert !path("${outputDir}/quast").exists()
+        }
+    }
+
+    test("fastq: no host removal, Kraken2 without Bracken, QUAST on") {
+        tag "requires_db"
+
+        when {
+            params {
+                outdir            = "$outputDir"
+                skip_host_removal = true
+                skip_kraken2      = false
+                skip_bracken      = true
+                kraken2_db        = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert !path("${outputDir}/bracken").exists()
+            assert path("${outputDir}/quast/test.tsv").exists()
+        }
+    }
+
+    test("fastq: no host removal, Kraken2 without Bracken, QUAST off - narrowest possible fastq-entry run") {
+        tag "requires_db"
+
+        // The minimum footprint reachable from a raw-FASTQ entry point:
+        // FASTP/FASTQC/MEGAHIT still run (no flag skips them - they are not
+        // optional for this entry type), but every genuinely optional stage
+        // is off except classification itself.
+        when {
+            params {
+                outdir            = "$outputDir"
+                skip_host_removal = true
+                skip_kraken2      = false
+                skip_bracken      = true
+                skip_quast        = true
+                kraken2_db        = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/bowtie2").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert !path("${outputDir}/bracken").exists()
+            assert !path("${outputDir}/quast").exists()
+        }
+    }
+
+    test("contigs: Kraken2 alone - the genuine single-node pipeline (owner's example, previously untested)") {
+        tag "requires_db"
+
+        // This is the smallest real analysis pipeline the toolbox can
+        // express today: one tool (Kraken2), nothing upstream (contigs
+        // entry skips fastp/FastQC/Bowtie2/MEGAHIT entirely - not just
+        // "skipped", genuinely inapplicable, §6.7), nothing downstream but
+        // MultiQC's aggregation. Bracken is force-skipped for contigs
+        // regardless of skip_bracken (it would crash - docs/KNOWN_ISSUES.md
+        // #14), so this is really testing whether Kraken2's report alone,
+        // with QUAST fully off, still produces a valid MultiQC report
+        // rather than repeating the "QUAST-only" silent-drop class of bug
+        // (docs/KNOWN_ISSUES.md #13) for Kraken2 specifically.
+        when {
+            params {
+                outdir       = "$outputDir"
+                input_type   = "contigs"
+                input        = "${projectDir}/assets/samplesheet_test_contigs.csv"
+                skip_kraken2 = false
+                skip_quast   = true
+                kraken2_db   = "${System.getenv('HOME')}/microbox-dbs/kraken2/viral"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !path("${outputDir}/fastp").exists()
+            assert !path("${outputDir}/fastqc").exists()
+            assert !path("${outputDir}/bowtie2").exists()
+            assert !path("${outputDir}/megahit").exists()
+            assert !path("${outputDir}/quast").exists()
+            assert !path("${outputDir}/bracken").exists()
+            assert path("${outputDir}/kraken2/test.kraken2.report.txt").exists()
+            assert path("${outputDir}/multiqc/multiqc_report.html").exists()
+            // Same class of bug as docs/KNOWN_ISSUES.md #13 (QUAST's data
+            // silently absent from MultiQC) - verify Kraken2's data actually
+            // reached the aggregated report content, not just that its own
+            // output file exists on disk next to an empty-looking MultiQC
+            // report.
+            assert path("${outputDir}/multiqc/multiqc_data/multiqc_general_stats.txt").text.contains("kraken")
         }
     }
 

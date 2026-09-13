@@ -1,0 +1,91 @@
+name: CI
+
+# Runs the same checks docs/TESTING.md §10 asks a human to run after every
+# change - added 2026-09-13 to close the "no CI wiring" gap flagged in
+# docs/TESTING.md §2 and docs/planning/PLAN.md §6.2. Every command below is
+# copied from what this project's own dev setup (bin/setup-dev.sh) and test
+# suites already use locally - nothing invented for CI specifically.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  pipeline-tests:
+    name: nf-test (basic - no external DB needed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21 (Temurin) - same version bin/setup-dev.sh installs
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21.0.12"
+
+      - name: Install Nextflow (pinned, matching bin/setup-dev.sh)
+        env:
+          NXF_VER: "26.04.6"
+        run: |
+          curl -s https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/nextflow
+          nextflow -version
+
+      - name: Install nf-test (pinned, matching bin/setup-dev.sh)
+        run: |
+          curl -sL https://code.askimed.com/install/nf-test | bash -s -- 0.9.5
+          sudo mv nf-test /usr/local/bin/nf-test
+          nf-test version
+
+      - name: Run the basic-tagged nf-test suite (12 tests, no DB downloads)
+        run: nf-test test tests/main.nf.test --tag basic --profile test,docker
+
+  ui-tests:
+    name: UI static analysis + AppTest suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UI dev dependencies (streamlit, pytest, ruff - pinned)
+        run: pip install -r ui/requirements-dev.txt
+
+      - name: ruff (matches docs/TESTING.md §2.1)
+        run: ruff check ui/app.py
+
+      - name: pytest + Streamlit AppTest (matches docs/TESTING.md §2.2)
+        run: pytest ui/test_app.py -v
+
+  shell-lint:
+    name: shellcheck all bin/ scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck (matches docs/TESTING.md §2.1)
+        run: shellcheck bin/*.sh
+
+  secrets-scan:
+    name: gitleaks secrets scan (full git history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, not just the latest commit - gitleaks scans all of it
+
+      - name: Install gitleaks (pinned, checksum-verified - not the marketplace Action, which gates private repos behind a paid license)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          curl -sL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sL -o checksums.txt "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep "linux_x64.tar.gz" checksums.txt | sha256sum -c -
+          tar xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+
+      - name: gitleaks detect (matches docs/TESTING.md §6)
+        run: gitleaks detect --source . -v

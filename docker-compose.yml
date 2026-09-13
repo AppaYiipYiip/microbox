@@ -1,0 +1,23 @@
+# Pavian (github.com/fbreitwieser/pavian) - PLAN.md §6.6 item 2: "Pavian =
+# standalone docker-compose service over Kraken2/Bracken reports, not a
+# pipeline step". This is deliberately NOT a Nextflow module - it's an
+# interactive R/Shiny viewer you point at whatever's already in results/,
+# run separately and on its own schedule (before, during, or long after any
+# pipeline run). Launch via bin/run-pavian.sh, not `docker compose up`
+# directly - the script checks results/ actually has something to show first
+# and prints the URL/usage hint.
+#
+# No official biocontainers image exists for Pavian (verified 2026-09-11,
+# PLAN.md §2.1) - quay.io/staphb/pavian:1.2.1 is StaPH-B's own build,
+# confirmed via its Dockerfile: EXPOSE 3838, CMD ["/usr/bin/shiny-server"],
+# WORKDIR /data.
+services:
+  pavian:
+    image: quay.io/staphb/pavian:1.2.1
+    ports:
+      - "3838:3838"
+    # Read-only: Pavian only ever needs to READ Kraken2/Bracken reports, never
+    # write into this pipeline's own output tree.
+    volumes:
+      - ./results:/data:ro
+    restart: unless-stopped

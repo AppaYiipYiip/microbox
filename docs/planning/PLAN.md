@@ -25,7 +25,7 @@
   - [6.4 GUI-agnostic core shape](#64-target-implementation-shape-option-b--pipeline-core-is-gui-agnostic) · [6.5 Accessibility/ownership](#65-accessibility--ownership-model-owner-decision-2026-09-11) · [6.6 Design decisions settled during coding](#66-design-decisions-to-settle-during-coding-fresh-eyes-review-2026-09-11--status-updated-with-owner-answers)
   - [6.7 Flexibility architecture (toolbox model)](#67-flexibility-architecture-owner-directive-2026-09-11) · [6.8 Independent review disposition](#68-independent-review--disposition-of-open-concerns-2026-09-11) · [6.9 WGS extensibility (not in MVP)](#69-wgs-extensibility--evaluated-2026-09-11-not-in-mvp-scope)
   - [6.10 Visual pipeline composition (not built)](#610-visual-pipeline-composition--per-node-branch-and-checkpoint-editing--raised-by-owner-2026-09-11-needs-study-not-scoped-or-built) · [6.11 Multi-page UI requirements (not built)](#611-multi-page-ui-requirements--brainstormed-2026-09-11-needs-study-not-scoped-or-built) · [6.12 UI technology & connection](#612-ui-technology--ui-to-backend-connection--researched-2026-09-11)
-  - [6.13 "Any node can be last" report-norms pass](#613-any-node-can-be-last-made-actually-true-and-a-real-report-norms-pass--owner-directive-2026-09-11) · [6.14 Resilience to lost connectivity](#614-resilience-to-lost-connectivity-and-multi-daysession-continuity--owner-directive-2026-09-12) · [6.15 Future composer QoL requirements](#615-quality-of-life-requirements-for-the-future-node-based-composer--brainstormed-2026-09-12-needs-study-not-scoped-or-built)
+  - [6.13 "Any node can be last" report-norms pass](#613-any-node-can-be-last-made-actually-true-and-a-real-report-norms-pass--owner-directive-2026-09-11) · [6.14 Resilience to lost connectivity](#614-resilience-to-lost-connectivity-and-multi-daysession-continuity--owner-directive-2026-09-12) · [6.15 Future composer QoL requirements](#615-quality-of-life-requirements-for-the-future-node-based-composer--brainstormed-2026-09-12-needs-study-not-scoped-or-built) · [6.16 Composer UI requirements + tool shortlist](#616-composer-ui-requirements-list--tool-shortlist--owner-directive-2026-09-13-needs-study-not-scoped-or-built)
 - [7. Platform choice decision](#7-key-decision-platform-choice-owner-decision-required)
 - [8. References](#8-references-all-accessed-2026-09-11)
 - [9. Tool catalogue](#9-tool-catalogue--what-every-tool-does-and-why-it-matters-owner-requested-2026-09-11) — every tool wired, planned, or researched, with verified container tags
@@ -647,6 +647,113 @@ Same status as §6.10/§6.11: a requirements brainstorm, not a design or impleme
 7. **An in-app helper/guide for adding a tool or getting oriented - explicitly a "nice to have," not a requirement** (owner, 2026-09-12: "as a nice requirement we can have a build a plugin or add a tool to the app helper or web page to guide them or make it very easy. this is not a necessity just a nice to have"). Two different things this could mean, both worth keeping open rather than picking one prematurely: (a) an in-app wizard/onboarding flow inside the eventual composer UI itself - closest analogue already decided is Nielsen heuristic 10 in `docs/TESTING.md` §4.1 ("help and documentation"), which already flags the *current* thin UI has zero in-app help; a composer-era version of this would be a real guided flow, not just a help link; (b) a separate documentation site/portal (e.g. a static docs site built from `docs/`) rather than (or alongside) in-app help - lower engineering cost, easier to keep current, but doesn't help someone who's already inside the app and stuck. **What already exists that partially covers the underlying need, today, without waiting for the composer**: `CONTRIBUTING.md` (added 2026-09-12) is exactly this guidance in written form for the most common maintenance task ("how do I add a tool") - not in-app, not interactive, but real and current. Revisit this item once the composer (§6.10) is actually being scoped, since an in-app wizard only makes sense once there's an app-with-nodes to be guided through in the first place.
 
 **Not decided here:** exactly how "estimated timeline" should be computed (a static per-tool table vs. a real historical-runs database vs. something scaling with detected input size) - though item 1's timing split above at least settles *when* each kind of warning can honestly appear; what "the machine's headroom" means precisely when the pipeline might run on a different, more capable machine than the one composing it (dev laptop composing a pipeline meant for the AWS `test` environment or the `prod` VM - PLAN.md §1.1's environment model already treats these as genuinely different capacity tiers - now also the normal Windows EC2 VM per §7/§6.6's resolved deployment decision); and whether any of this needs new instrumentation beyond what Nextflow's trace file already provides.
+
+### 6.16 Composer UI requirements list + tool shortlist — owner directive, 2026-09-13, needs study, NOT scoped or built
+
+**Owner's request, verbatim in shape:** a Figma-like node canvas, drag nodes from a categorized palette
+(visualization, classification, etc.) onto the canvas, each node clickable and hoverable, a navigation menu
+between different pages, and **French/English language switching called out as very important**. Asked
+explicitly for a requirements list first (Must-have / Nice-to-have / Don't-need), *then* to use it to find
+the right tool - not the other way around. This section is that requirements list, plus a tool shortlist
+that follows from it. **Still just research/requirements, same status as §6.10/§6.11 - not scoped, not
+started, not a decision to build yet.**
+
+**Important context carried forward, not re-derived from scratch:** §6.12 (2026-09-11) already researched
+and confirmed **React Flow (`@xyflow/react`)** as the canvas library for exactly this "Figma-like node
+editor" need - MIT-licensed, the standard tool for this in the current React ecosystem. That research is
+re-verified below, not redone. What's genuinely new in this request and *not* covered by §6.12: the
+categorized drag-source palette, multi-page navigation, and i18n - none of which were part of the earlier
+canvas-only research.
+
+#### Requirements
+
+**Canvas / node editing**
+- *Must-have*: drag nodes from a palette onto a canvas; connect nodes with edges; pan/zoom; click a node to
+  select/inspect it; hover a node for a quick-info tooltip; visually distinguish node state (default vs.
+  overridden params, enabled vs. skipped, valid vs. incompatible connection - all already required by
+  §6.10's type-compatibility finding and §6.11's Pipeline-page refinements, carried forward here rather than
+  restated as new).
+- *Nice-to-have*: auto-layout/auto-arrange, a minimap, undo/redo, keyboard shortcuts.
+- *Don't need*: real-time multi-user collaborative editing (Figma's actual signature feature) - out of
+  scope, consistent with §6.8 item 10 (multi-user auth explicitly not needed); canvas performance at
+  thousands-of-nodes scale (this toolbox is ~20 nodes total, per §6.10's own bounded-scale reasoning).
+
+**Node palette / categorization**
+- *Must-have*: nodes grouped into categories (QC, assembly, classification, visualization, etc., per the
+  owner's own examples) in a side panel; each node draggable onto the canvas from there.
+- *Nice-to-have*: search/filter within the palette, collapsible category groups, per-node icons.
+- *Don't need*: a plugin/marketplace system for arbitrary third-party nodes - the toolbox is curated and
+  bounded (§6.10's Option A decision), not an open extension platform.
+
+**Navigation / app shell**
+- *Must-have*: a persistent navigation menu between distinct pages/views - already flagged as a requirement
+  in §6.11 once page count grows (Pipeline/Composer, Run History, Run Detail, at minimum).
+- *Nice-to-have*: bookmarkable/shareable URLs per page or per run; breadcrumbs.
+- *Don't need*: role-based/permissioned navigation - no multi-user model exists or is planned.
+
+**Internationalization (French/English) - called out explicitly as very important**
+- *Must-have*: a real i18n architecture from the start (not bolted on later) covering all UI chrome, node
+  names/descriptions/tooltips, and navigation - a live toggle between French and English, not a
+  build-time-only choice.
+- *Nice-to-have*: designed so a third language is cheap to add later (a proper key/locale-file structure
+  rather than hardcoded strings), even though only two are needed now.
+- *Don't need*: automatic translation of dynamic pipeline output (tool logs, error text from Nextflow/the
+  underlying bioinformatics tools) - that text is English-only from upstream and machine-translating it
+  would risk misrepresenting a real scientific error message; translate the *UI*, not tool output.
+
+**Persistence / export** (cross-reference, not new - §6.11 already requires this in full)
+- *Must-have*: save/load a complete pipeline configuration (functional core + presentation layer, one
+  portable file, fully reconstructable on another machine) - already specified in detail in §6.11, repeated
+  here only as a reminder that whatever tool is chosen must support serializing canvas state cleanly.
+- *Don't need*: cloud sync/real-time multi-device sync - no cloud UI exists or is planned (§7's resolved
+  Seqera decision).
+
+**Platform / deployment fit**
+- *Must-have*: runs entirely locally, no internet dependency at runtime (aligns with the resilience
+  requirement, `docs/planning/PLAN.md` §6.14) - a browser-based app is fine since it's OS-agnostic and the
+  production target is a normal Windows VM (§7's resolved deployment decision), but all assets must be
+  self-hostable, not CDN-only.
+- *Must-have*: the GUI-agnostic contract stays intact - the pipeline engine is untouched, and this UI talks
+  to it the same way `ui/app.py` does today (CLI/params-file in, `results/` files out), not by reaching into
+  `workflows/microbox.nf` directly.
+- *Don't need*: mobile-responsive design for v1 - a desktop scientific tool, not a phone-first product.
+
+**License / cost**
+- *Must-have*: free and open-source at the core, no per-seat licensing - matches this project's whole
+  ethos and its explicit rejection of paid platforms (Seqera Platform ruled out, §7).
+- *Don't need*: any paid "Pro" tier - React Flow's core is MIT-licensed and sufficient (§6.12), and nothing
+  in the requirements above needs its paid tier's premium templates/support.
+
+#### Tool shortlist (verified live 2026-09-13, not assumed from §6.12's 2026-09-11 research alone)
+
+- **Canvas: React Flow, now published as `@xyflow/react`, re-confirmed still active and current.** Its own
+  official docs demonstrate exactly the categorized-sidebar-drag-to-canvas pattern this request describes
+  (a custom `Sidebar` component holding draggable node templates, dropped onto the `ReactFlow` pane) - this
+  is a documented, first-class use case, not something to build against the grain of the library.
+  Source: [React Flow — Drag and Drop example](https://reactflow.dev/examples/interaction/drag-and-drop),
+  [xyflow/xyflow discussion — sidebar with draggable node templates](https://github.com/xyflow/xyflow/discussions/2928).
+- **Navigation: React Router, now at v8 (confirmed current as of August 2026)** - the standard React routing
+  library, actively maintained; note for whoever implements this: `react-router-dom` no longer exists as a
+  separate package as of v8, it's folded into `react-router` itself - don't reference the old package name.
+  Source: [React Router v8 release coverage, InfoQ, 2026-08](https://www.infoq.com/news/2026/08/react-route-v8/),
+  [React Router changelog](https://reactrouter.com/changelog).
+- **Internationalization: `react-i18next`** - the dominant choice for React i18n (~8M weekly downloads, by
+  far the largest ecosystem of the alternatives), explicitly supports dynamic runtime language switching
+  and namespace-based translation-file organization - directly satisfies "switching between French and
+  English is very important" plus the "cheap to add a third language later" nice-to-have via its locale-file
+  structure. `react-intl`/FormatJS (ICU-standard, more enterprise-formatting-focused) and LinguiJS (smallest
+  bundle, ~3KB) are credible alternatives if bundle size or ICU compliance ever become a deciding factor,
+  but neither has a compelling reason to be preferred here over the ecosystem-standard choice.
+  Source: [react-i18next vs react-intl comparison, locize, 2026](https://www.locize.com/blog/react-intl-vs-react-i18next),
+  [Best i18n libraries for React 2026, PkgPulse](https://www.pkgpulse.com/guides/best-i18n-libraries-react-2026).
+
+**What this does NOT decide:** whether to actually build this (still §6.10/§6.11's open "needs study, NOT
+scoped or built" status - a requirements list and a tool shortlist are inputs to that decision, not the
+decision itself); the FastAPI backend/weblog architecture from §6.12 is unaffected by any of this and still
+stands as the separately-researched plan for the UI-to-pipeline connection; exact page inventory beyond what
+§6.11 already brainstormed; and how the "curated bounded toolbox" (§6.10 Option A) maps onto the specific
+category names the owner used as examples (visualization, classification) - those need to be enumerated
+against the real current toolbox once this is actually scoped.
 
 ## 7. Key decision: platform choice (owner decision required)
 

@@ -42,6 +42,15 @@
   cursor: not-allowed;
 }
 
+/* Undo/Redo - circular arrows (owner feedback 2026-09-13: "the circular
+   ones that mean back and forth cycle", not straight arrows), icon-only so
+   `aria-label` carries the accessible name instead of visible text. */
+.composer-page__btn--icon {
+  padding: 0.3rem 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .composer-page__btn--primary {
   background: #3a6cf4;
   border-color: #3a6cf4;
@@ -105,7 +114,9 @@
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 240px;
+  width: 280px;
+  max-height: calc(100% - 2rem);
+  overflow-y: auto;
   border: 1px solid #333;
   border-radius: 8px;
   background: #1a1a1acc;
@@ -182,4 +193,88 @@
   font-size: 0.8rem;
   color: #ccc;
   cursor: pointer;
+}
+
+.composer-page__kraken2-helper {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #333;
+}
+
+.composer-page__kraken2-hint {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.7rem;
+  color: #888;
+}
+
+.composer-page__kraken2-variants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.composer-page__kraken2-variant {
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.75rem;
+  color: #ccc;
+}
+
+.composer-page__kraken2-variant p {
+  margin: 0.3rem 0 0;
+}
+
+.composer-page__kraken2-variant--recommended {
+  border-color: #4caf6f;
+  background: #4caf6f1a;
+}
+
+.composer-page__kraken2-variant-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  color: #eee;
+  font-size: 0.8rem;
+}
+
+.composer-page__kraken2-badge {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background: #4caf6f;
+  color: #0d1a12;
+  font-weight: 600;
+}
+
+.composer-page__kraken2-badge--planned {
+  background: #555;
+  color: #eee;
+}
+
+.composer-page__kraken2-ram {
+  margin: 0.25rem 0 0;
+  color: #999;
+}
+
+.composer-page__kraken2-use-path {
+  margin-top: 0.4rem;
+  background: transparent;
+  border: 1px solid #444;
+  color: #aaa;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.composer-page__kraken2-use-path:hover {
+  color: #fff;
+  border-color: #666;
 }

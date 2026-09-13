@@ -69,10 +69,34 @@
 }
 
 .node-palette__category-title {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  background: transparent;
+  border: none;
   font-size: 0.8rem;
   color: #aaa;
   margin: 0 0 0.4rem;
+  padding: 0;
   font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-palette__category-title:hover {
+  color: #ddd;
+}
+
+.node-palette__category-chevron {
+  display: inline-block;
+  font-size: 0.65rem;
+  color: #666;
+  transition: transform 0.1s;
+}
+
+.node-palette__category-chevron--collapsed {
+  transform: rotate(-90deg);
 }
 
 .node-palette__cards {

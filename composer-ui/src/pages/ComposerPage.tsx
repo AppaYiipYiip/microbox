@@ -4,18 +4,38 @@ import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, type Connecti
 import { NodePalette } from '../components/NodePalette'
 import { PipelineCanvas } from '../components/PipelineCanvas'
 import { TOOL_CATALOG } from '../data/toolCatalog'
-import type { ToolNodeType } from '../components/ToolNode'
+import type { ToolNodeType, ToolNodeData } from '../components/ToolNode'
 import { updateNodeParam as mergeNodeParam } from '../utils/updateNodeParam'
 import { toggleNodeEnabled as toggleNodeEnabledInList } from '../utils/toggleNodeEnabled'
 import { nextNodeId } from '../utils/nodeId'
 import { EMPTY_HISTORY, pushSnapshot, undo as undoHistory, redo as redoHistory } from '../utils/history'
 import { findInvalidEdges } from '../utils/validatePipeline'
 import { parseCanvasSnapshot, type ImportError } from '../utils/importCanvasSnapshot'
+import { KRAKEN2_DB_VARIANTS, conventionalKraken2DbPath } from '../data/kraken2DbVariants'
+import { recommendKraken2Db } from '../utils/recommendKraken2Db'
+import { estimateDeviceMemoryGiB } from '../utils/estimateDeviceMemory'
 import './ComposerPage.css'
 
 function toolName(t: (key: string) => string, toolId: string): string {
   const tool = TOOL_CATALOG.find((tl) => tl.id === toolId)
   return tool ? t(tool.nameKey) : toolId
+}
+
+// React Flow's own per-node `.selected` boolean (what actually drives the
+// blue border/resize-handle overlay on the canvas, via NodeProps.selected)
+// only stays in sync with our own `selectedNodeId` tracker automatically
+// when a SELECTION CHANGE comes from React Flow itself (a real node/pane
+// click always also dispatches its own 'select' NodeChange through
+// onNodesChange). Any place THIS file changes the selection programmatically
+// - duplicate, paste, undo/redo, Escape, the Close button - bypasses that
+// dispatch entirely, so without this, the detail panel would silently point
+// at the right node while the canvas highlight stayed on the old one (found
+// testing paste: pasted a node twice, the panel correctly showed the new
+// node but the blue border never left the original). Keeps unaffected node
+// object references stable (only remaps entries whose `selected` actually
+// needs to change) so it doesn't cause needless re-renders elsewhere.
+function withNoSelection(nodes: ToolNodeType[]): ToolNodeType[] {
+  return nodes.some((n) => n.selected) ? nodes.map((n) => (n.selected ? { ...n, selected: false } : n)) : nodes
 }
 
 // Downloads a JSON snapshot of the canvas via a Blob + temporary <a
@@ -58,6 +78,21 @@ function ComposerInner() {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
   const selectedTool = selectedNode ? TOOL_CATALOG.find((tool) => tool.id === selectedNode.data.toolId) : null
 
+  // Kraken2 DB variant helper (owner, 2026-09-13: "let the user select
+  // which version they want, and have one written as (recommended) based
+  // on their hardware. we automatically detect their hardware
+  // capabilities."). `deviceMemoryGiB` is read once (it can't change at
+  // runtime) via navigator.deviceMemory - Chromium-only, and capped at 8 by
+  // the browser for privacy, so it's used only to PRE-FILL an editable
+  // input, never shown as an authoritative reading (estimateDeviceMemory.ts
+  // has the full explanation). `kraken2RamInput` stays a string so the
+  // field can be genuinely empty (browser didn't/couldn't detect anything)
+  // rather than defaulting to a misleading 0 or a guessed number.
+  const [deviceMemoryGiB] = useState(estimateDeviceMemoryGiB)
+  const [kraken2RamInput, setKraken2RamInput] = useState(() => (deviceMemoryGiB !== null ? String(deviceMemoryGiB) : ''))
+  const kraken2RamGiB = Number.parseFloat(kraken2RamInput)
+  const recommendedKraken2Db = Number.isFinite(kraken2RamGiB) && kraken2RamGiB > 0 ? recommendKraken2Db(kraken2RamGiB) : null
+
   // Flags connections that don't correspond to any real dependency in
   // workflows/microbox.nf (owner feedback 2026-09-13, after asking about a
   // saved canvas: "doesnt each node have a set of parametres..." led into
@@ -83,7 +118,7 @@ function ComposerInner() {
     const result = undoHistory(history, { nodes, edges })
     if (!result) return
     setHistory(result.history)
-    setNodes(result.snapshot.nodes)
+    setNodes(withNoSelection(result.snapshot.nodes))
     setEdges(result.snapshot.edges)
     setSelectedNodeId(null)
   }, [history, nodes, edges, setNodes, setEdges])
@@ -92,31 +127,10 @@ function ComposerInner() {
     const result = redoHistory(history, { nodes, edges })
     if (!result) return
     setHistory(result.history)
-    setNodes(result.snapshot.nodes)
+    setNodes(withNoSelection(result.snapshot.nodes))
     setEdges(result.snapshot.edges)
     setSelectedNodeId(null)
   }, [history, nodes, edges, setNodes, setEdges])
-
-  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y to redo - skipped
-  // while focus is inside a text field so the browser's own native text-undo
-  // still works for in-progress param edits.
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const target = event.target
-      const isEditableTarget = target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-      if (isEditableTarget || !(event.metaKey || event.ctrlKey)) return
-      const key = event.key.toLowerCase()
-      if (key === 'z' && !event.shiftKey) {
-        event.preventDefault()
-        handleUndo()
-      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
-        event.preventDefault()
-        handleRedo()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleUndo, handleRedo])
 
   // New edges are explicitly typed 'deletable' (DeletableEdge, the X-on-
   // click component) rather than relying on ReactFlow's defaultEdgeOptions
@@ -177,13 +191,141 @@ function ComposerInner() {
         ...node,
         id: nextNodeId(),
         position: { x: node.position.x + 24, y: node.position.y + 24 },
-        selected: false,
+        selected: true,
       }
-      setNodes((nds) => [...nds, newNode])
+      // The new node becomes the selection - deselect whatever was
+      // selected before it in the same update (see withNoSelection above).
+      setNodes((nds) => [...withNoSelection(nds), newNode])
       setSelectedNodeId(newNode.id)
     },
     [nodes, takeSnapshot, setNodes],
   )
+
+  // Copy/cut/paste (owner, 2026-09-13: "i assume ctrl+c or x or z or r are
+  // working") - scoped to the single selected node, same as Duplicate, not
+  // the whole multi-selection, so it doesn't introduce a second, different
+  // notion of "the current selection." Clipboard lives in component state,
+  // not the real OS clipboard - pasting into a different tab/session isn't
+  // a requirement here, and the Clipboard API would need its own permission
+  // prompt for no real benefit. pasteOffset staircases repeated pastes from
+  // the same copy apart instead of stacking them exactly on top of each
+  // other; resets whenever something new is copied/cut.
+  const [clipboard, setClipboard] = useState<{ data: ToolNodeData; position: { x: number; y: number }; width?: number; height?: number } | null>(null)
+  const [pasteOffset, setPasteOffset] = useState(0)
+
+  const copyNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId)
+      if (!node) return
+      setClipboard({ data: { ...node.data, params: { ...node.data.params } }, position: node.position, width: node.width, height: node.height })
+      setPasteOffset(0)
+    },
+    [nodes],
+  )
+
+  const pasteClipboard = useCallback(() => {
+    if (!clipboard) return
+    takeSnapshot()
+    const offset = 24 * (pasteOffset + 1)
+    const newNode: ToolNodeType = {
+      id: nextNodeId(),
+      type: 'tool',
+      position: { x: clipboard.position.x + offset, y: clipboard.position.y + offset },
+      width: clipboard.width,
+      height: clipboard.height,
+      data: { ...clipboard.data, params: { ...clipboard.data.params } },
+      selected: true,
+    }
+    setNodes((nds) => [...withNoSelection(nds), newNode])
+    setSelectedNodeId(newNode.id)
+    setPasteOffset((n) => n + 1)
+  }, [clipboard, pasteOffset, takeSnapshot, setNodes])
+
+  const cutNode = useCallback(
+    (nodeId: string) => {
+      copyNode(nodeId)
+      takeSnapshot()
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+      setSelectedNodeId(null)
+    },
+    [copyNode, takeSnapshot, setNodes, setEdges],
+  )
+
+  // Deselects everything - both our own tracker (closes the detail panel)
+  // and every node's underlying `.selected` flag (clears the canvas
+  // highlight); see withNoSelection above for why both are needed.
+  const clearSelection = useCallback(() => {
+    setSelectedNodeId(null)
+    setNodes(withNoSelection)
+  }, [setNodes])
+
+  // Keyboard shortcuts (PLAN.md §6.16 canvas nice-to-have: "keyboard
+  // shortcuts") - all skipped while focus is inside a text field so the
+  // browser's own native behavior (e.g. text-field undo) still works for
+  // in-progress param edits, and none of them fire on a bare keypress
+  // without a modifier except Escape, which only acts when something is
+  // actually selected.
+  //   Ctrl/Cmd+Z          undo
+  //   Ctrl/Cmd+Shift+Z/Y  redo
+  //   Ctrl/Cmd+D          duplicate the selected node (mirrors the
+  //                       detail panel's own Duplicate button)
+  //   Ctrl/Cmd+C/X/V      copy/cut/paste the selected node
+  //   Escape              close the detail panel / clear selection
+  // Deliberately NOT bound: Ctrl/Cmd+R (browser refresh) - hijacking a
+  // fundamental browser affordance like page refresh is a materially
+  // different, more invasive choice than the others above (all of which
+  // shadow browser shortcuts with no real everyday use inside this app -
+  // bookmarking a SPA route, "find in page" isn't wired to anything here);
+  // left alone unless there's a specific feature it should actually do.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target
+      const isEditableTarget = target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if (isEditableTarget) return
+
+      if (event.key === 'Escape') {
+        if (selectedNodeId) clearSelection()
+        return
+      }
+
+      if (!(event.metaKey || event.ctrlKey)) return
+      const key = event.key.toLowerCase()
+      if (key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        handleUndo()
+      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+        event.preventDefault()
+        handleRedo()
+      } else if (key === 'd') {
+        // preventDefault is load-bearing here, not just tidy - Ctrl/Cmd+D is
+        // the browser's own "bookmark this page" shortcut; without it,
+        // duplicating a node would also pop open the browser's bookmark
+        // dialog.
+        event.preventDefault()
+        if (selectedNodeId) duplicateNode(selectedNodeId)
+      } else if (key === 'c') {
+        // Don't hijack a normal text-copy just because a node also happens
+        // to be selected (e.g. the user selected the page title and
+        // pressed Ctrl+C) - only intercept when there's no active text
+        // selection to copy instead.
+        if (selectedNodeId && !window.getSelection()?.toString()) {
+          event.preventDefault()
+          copyNode(selectedNodeId)
+        }
+      } else if (key === 'x') {
+        if (selectedNodeId) {
+          event.preventDefault()
+          cutNode(selectedNodeId)
+        }
+      } else if (key === 'v') {
+        event.preventDefault()
+        pasteClipboard()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleUndo, handleRedo, duplicateNode, copyNode, cutNode, pasteClipboard, clearSelection, selectedNodeId])
 
   // Import (PLAN.md §6.11: "save/import/export a pipeline configuration as a
   // portable file"). A hidden <input type="file"> triggered by the visible
@@ -234,11 +376,25 @@ function ComposerInner() {
       <div className="composer-page__toolbar">
         <h1 className="composer-page__title">{t('composer.title')}</h1>
         <div className="composer-page__actions">
-          <button type="button" className="composer-page__btn" title="Ctrl+Z" disabled={history.past.length === 0} onClick={handleUndo}>
-            {t('composer.undo')}
+          <button
+            type="button"
+            className="composer-page__btn composer-page__btn--icon"
+            title={`${t('composer.undo')} (Ctrl+Z)`}
+            aria-label={t('composer.undo')}
+            disabled={history.past.length === 0}
+            onClick={handleUndo}
+          >
+            ↺
           </button>
-          <button type="button" className="composer-page__btn" title="Ctrl+Shift+Z" disabled={history.future.length === 0} onClick={handleRedo}>
-            {t('composer.redo')}
+          <button
+            type="button"
+            className="composer-page__btn composer-page__btn--icon"
+            title={`${t('composer.redo')} (Ctrl+Shift+Z)`}
+            aria-label={t('composer.redo')}
+            disabled={history.future.length === 0}
+            onClick={handleRedo}
+          >
+            ↻
           </button>
           <button
             type="button"
@@ -301,10 +457,10 @@ function ComposerInner() {
           {selectedNode && selectedTool && (
             <aside className="composer-page__detail" aria-label={t('composer.nodeSelected')}>
               <div className="composer-page__detail-actions">
-                <button type="button" className="composer-page__detail-duplicate" onClick={() => duplicateNode(selectedNode.id)}>
+                <button type="button" className="composer-page__detail-duplicate" title="Ctrl+D" onClick={() => duplicateNode(selectedNode.id)}>
                   {t('composer.duplicate')}
                 </button>
-                <button type="button" className="composer-page__detail-close" onClick={() => setSelectedNodeId(null)}>
+                <button type="button" className="composer-page__detail-close" onClick={clearSelection}>
                   {t('composer.clearSelection')}
                 </button>
               </div>
@@ -333,6 +489,55 @@ function ComposerInner() {
                 </form>
               ) : (
                 <p className="composer-page__no-params">{t('composer.noParams')}</p>
+              )}
+              {selectedTool.id === 'kraken2' && (
+                <div className="composer-page__kraken2-helper">
+                  <label className="composer-page__param-field">
+                    <span>{t('composer.kraken2.ramLabel')}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={kraken2RamInput}
+                      onChange={(e) => setKraken2RamInput(e.target.value)}
+                    />
+                  </label>
+                  <p className="composer-page__kraken2-hint">
+                    {deviceMemoryGiB !== null ? t('composer.kraken2.ramAutoHint') : t('composer.kraken2.ramManualHint')}
+                  </p>
+                  <ul className="composer-page__kraken2-variants">
+                    {KRAKEN2_DB_VARIANTS.map((variant) => {
+                      const isRecommended = recommendedKraken2Db?.id === variant.id
+                      return (
+                        <li
+                          key={variant.id}
+                          className={isRecommended ? 'composer-page__kraken2-variant composer-page__kraken2-variant--recommended' : 'composer-page__kraken2-variant'}
+                        >
+                          <div className="composer-page__kraken2-variant-header">
+                            <strong>{t(variant.nameKey)}</strong>
+                            {isRecommended && <span className="composer-page__kraken2-badge">{t('composer.kraken2.recommended')}</span>}
+                            {!variant.wired && (
+                              <span className="composer-page__kraken2-badge composer-page__kraken2-badge--planned">
+                                {t('composer.kraken2.notYetAvailable')}
+                              </span>
+                            )}
+                          </div>
+                          <p>{t(variant.descriptionKey)}</p>
+                          <p className="composer-page__kraken2-ram">{t('composer.kraken2.ramRequirement', { ram: variant.ramGiB })}</p>
+                          {variant.wired && (
+                            <button
+                              type="button"
+                              className="composer-page__kraken2-use-path"
+                              onClick={() => updateNodeParam(selectedNode.id, 'kraken2_db', conventionalKraken2DbPath(variant.id))}
+                            >
+                              {t('composer.kraken2.usePath')}
+                            </button>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
               )}
             </aside>
           )}

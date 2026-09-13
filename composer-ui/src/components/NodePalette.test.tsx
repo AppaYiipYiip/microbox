@@ -64,4 +64,33 @@ describe('NodePalette', () => {
     await user.type(screen.getByPlaceholderText('Search tools...'), 'not-a-real-tool-name')
     expect(screen.getByText('No tools match your search.')).toBeInTheDocument()
   })
+
+  // PLAN.md §6.16 node-palette nice-to-have: "collapsible category groups."
+  it('clicking a category header collapses and re-expands its tools', async () => {
+    const user = userEvent.setup()
+    renderPalette()
+
+    const categoryHeader = screen.getByRole('button', { name: /Read QC & Trimming/ })
+    expect(categoryHeader).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('fastp')).toBeInTheDocument()
+
+    await user.click(categoryHeader)
+    expect(categoryHeader).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('fastp')).not.toBeInTheDocument()
+
+    await user.click(categoryHeader)
+    expect(categoryHeader).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('fastp')).toBeInTheDocument()
+  })
+
+  it('a collapsed category still shows its tools once a search matches them (search overrides collapse)', async () => {
+    const user = userEvent.setup()
+    renderPalette()
+
+    await user.click(screen.getByRole('button', { name: /Read QC & Trimming/ }))
+    expect(screen.queryByText('fastp')).not.toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('Search tools...'), 'fastp')
+    expect(screen.getByText('fastp')).toBeInTheDocument()
+  })
 })

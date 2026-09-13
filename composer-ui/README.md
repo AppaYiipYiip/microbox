@@ -33,6 +33,72 @@ actually clicking through it, not from re-reading the requirements:
   entirely rather than left as an empty header, and an honest "no tools match" message shows when nothing
   does. Verified live in both languages, including the description-only match case (typing "kraken" also
   surfaces Bracken and Pavian, since their descriptions mention Kraken2, not just the Kraken2 card itself).
+  Each category header is also a **collapse/expand toggle** (PLAN.md §6.16's other node-palette nice-to-have,
+  "collapsible category groups") - a chevron rotates to show state; collapsing is purely visual state, so a
+  collapsed category's tools still surface once a search matches them rather than staying hidden (search
+  overrides collapse, not the other way around). Verified live: collapsing/re-expanding a category, and a
+  collapsed category's tools reappearing the moment a matching search query is typed.
+- **Keyboard shortcuts** (PLAN.md §6.16 canvas nice-to-have; the copy/cut/paste ones were the owner asking
+  "i assume ctrl+c or x or z or r are working" - undo/redo/duplicate already did, copy/cut/paste didn't yet,
+  built rather than left as an untrue assumption): `Ctrl/Cmd+D` duplicates the selected node (mirrors the
+  detail panel's own Duplicate button); `Ctrl/Cmd+C`/`X`/`V` copy/cut/paste it (scoped to the single
+  selected node, same as Duplicate - a component-state clipboard, not the real OS one, since cross-tab paste
+  isn't a requirement here and the Clipboard API would need its own permission prompt for no benefit;
+  repeated pastes from the same copy stagger apart by 24px instead of stacking exactly on top of each
+  other); `Escape` closes the detail panel/clears the selection. All of the above `event.preventDefault()`
+  their browser default (bookmark dialog for `D`, nothing meaningful for `X`/`V` outside a text field) -
+  except `C`, which deliberately does NOT intercept when there's an active text selection elsewhere on the
+  page, so selecting the page title and pressing Ctrl+C still copies that text normally rather than being
+  silently hijacked into copying a node just because one happens to also be selected. All skip while focus
+  is in a text field, same as the undo/redo shortcuts. **Deliberately not bound: `Ctrl/Cmd+R`** (browser
+  refresh) - hijacking page refresh is a materially more invasive choice than shadowing a rarely-used
+  browser shortcut (bookmarking a SPA route, copying page text with nothing selected) and wasn't left
+  disabled for lack of trying - there's just no specific feature it should map to yet. Undo/Redo are now
+  circular-arrow icon buttons (owner: "the circular ones that mean back and forth cycle, not the straight
+  ones") rather than text labels, with the action name + shortcut in the tooltip/`aria-label` since the icon
+  alone isn't accessible on its own. **A real, previously-unnoticed selection bug found and fixed while
+  testing paste**: Duplicate/Paste/Undo/Redo/Escape/Close all update this app's own `selectedNodeId` tracker
+  (correctly driving the detail panel) but were never updating each node's own React-Flow-level `.selected`
+  flag (what actually drives the blue border/resize-handle overlay on the canvas) - so after a paste, the
+  panel would correctly show the new node while the canvas kept highlighting the old one. A real click
+  doesn't hit this (React Flow dispatches its own selection change automatically), only this app's own
+  programmatic selection changes did. Fixed with a shared `withNoSelection`/`clearSelection` helper used
+  everywhere the selection changes outside of a real click. Verified live in-browser (not unit-tested - all
+  of these need a selected node, which needs React Flow's click-to-select, the same jsdom limitation noted
+  in the Testing section below): copy then paste twice produced two independent staggered nodes with the
+  canvas highlight correctly following the newest paste (confirmed via the DOM, not just visually), Ctrl+D
+  created a real second node without triggering the browser's bookmark dialog, and Escape closed the panel
+  and fully cleared the selection border.
+- **Kraken2 database-variant helper** (owner, 2026-09-13: "let the user select which version they want, and
+  have one written as (recommended) based on their hardware. we automatically detect their hardware
+  capabilities"). Kraken2's detail panel now shows four real database variants (`src/data/
+  kraken2DbVariants.ts`, grounded in PLAN.md §2.3's own researched table - name, real RAM requirement, and
+  whether `bin/download-dbs.sh` can actually fetch it today, checked directly against that script rather
+  than assumed from the table alone: Viral and Standard-8 are wired up, Standard-16/PlusPF-16 are documented
+  production candidates the script explicitly hasn't been extended to yet), each with a "Use this path"
+  button that fills the real `kraken2_db` field with the download script's own conventional extract path
+  (`~/microbox-dbs/kraken2/<variant>` - a copyable convention, not a claim this browser app can see the
+  user's actual filesystem) - skipped entirely for the two not-yet-downloadable variants, since offering a
+  path for a DB nothing can fetch yet would be actively misleading.
+  **On "we automatically detect their hardware capabilities" - the honest version of that, not a fake one**:
+  a browser fundamentally cannot read a machine's real total RAM. `navigator.deviceMemory` (Chromium-only,
+  unsupported in Firefox/Safari) exists, but is deliberately rounded to a power of two AND CAPPED AT 8 for
+  privacy — a machine with 8, 16, 64, or 256 GiB of RAM all report the same "8"
+  (`src/utils/estimateDeviceMemory.ts` has the full citation). That cap makes it structurally unable to
+  distinguish the cases this feature's bigger recommendations (14.9+ GiB variants) actually depend on. Used
+  here ONLY to pre-fill a plainly-editable "Available RAM" number input, never presented as an authoritative
+  reading — when the API isn't supported at all, the field starts empty with a message saying so, rather than
+  guessing. `src/utils/recommendKraken2Db.ts` (pure, unit-tested) then recommends the largest variant whose
+  RAM requirement is at most **half** of that figure — a deliberately conservative margin grounded in this
+  project's own real finding (PLAN.md §2.3 / `docs/KNOWN_ISSUES.md`): on an 11 GiB VM, the 7.45 GiB
+  Standard-8 DB *did* classify correctly, but only when run completely alone — running it alongside a real
+  MEGAHIT assembly OOM-killed the assembly. That's already ~68% utilization proven too tight for a real run;
+  50% is a real answer to a real observed failure, not an arbitrary number. **Verified live in-browser**: the
+  dev machine's real (Chromium-reported) `deviceMemory` of 4 correctly pre-filled the RAM field and
+  recommended Viral; editing it to 32 live-updated the recommendation to Standard-16 (still correctly marked
+  "not yet downloadable"); clicking "Use this path" on Viral filled the real path field with
+  `~/microbox-dbs/kraken2/viral` and the node's override dot appeared, confirming it's a real, working
+  update to that node's actual param, not a cosmetic suggestion.
 - A React Flow canvas (`src/components/PipelineCanvas.tsx`, `colorMode="dark"`) — drag a tool from the
   palette, drop it on the canvas, connect nodes, click to select (a floating detail panel over the canvas,
   not a fixed column), hover for a tooltip. Zoom/fit-view/lock controls render in the library's dark theme,
@@ -169,8 +235,9 @@ actually clicking through it, not from re-reading the requirements:
   clear error and leave the canvas untouched; Undo confirmed to recover the pre-import canvas. Palette
   search confirmed live in both languages: typing "kraken" surfaces Kraken2/Bracken/Pavian (a description-
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
-  and an unmatchable query shows the translated "no tools match" message.
-- `npm test` (Vitest + React Testing Library, 62 tests) — i18n key-structure parity between `en.json`/
+  and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
+  via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
+- `npm test` (Vitest + React Testing Library, 72 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
@@ -184,7 +251,12 @@ actually clicking through it, not from re-reading the requirements:
   round-trips a full snapshot, remaps ids, defaults missing fields sensibly, and rejects invalid JSON, the
   wrong format version, an unknown tool id, and structurally malformed nodes/edges, `matchesSearch`
   (`src/utils/paletteSearch.ts`) matches/rejects correctly and treats an empty query as matching everything,
-  and `NodePalette` filters to matching tools, hides empty categories, and shows the "no results" message.
+  and `NodePalette` filters to matching tools, hides empty categories, shows the "no results" message, and
+  collapses/re-expands a category (with a matching search still surfacing a collapsed category's tools),
+  `recommendKraken2Db` (`src/utils/recommendKraken2Db.ts`) recommends the correct variant across a range of
+  real RAM figures (including the real 7 GiB/11 GiB cases from this project's own past findings) and never
+  returns nothing, and `estimateDeviceMemoryGiB` returns the browser-reported value when present and `null`
+  when the API isn't supported.
 - `npm run build` — a real production build succeeds. **Note**: `npx tsc --noEmit` alone is not sufficient -
   it missed a real type error (`Object.fromEntries` losing type narrowing through a `.filter()`) that only
   `npm run build`'s `tsc -b` (project-reference build) caught, presumably a difference in which tsconfig each
@@ -238,6 +310,17 @@ there later; not yet included since this is still a prototype, not part of the s
   deliberate scope cut (matches what was actually asked for), not a gap that snuck in unnoticed.
 - **No minimap or snap-to-grid** — raised as candidate QoL items alongside undo/redo/multi-select but not
   picked when the owner was asked to prioritize (`docs/KNOWN_ISSUES.md` Open #8 has the full candidate list).
+- **Copy/cut/paste is scoped to a single node**, same as Duplicate - not the whole multi-selection. A
+  deliberate consistency choice (both features now share one notion of "the current selection"), not an
+  oversight; extending both together to real multi-selection is a reasonable future ask, not attempted here.
+- **The Kraken2 RAM/variant helper is guidance, not automation** — "Use this path" writes a *conventional*
+  path string into the real `kraken2_db` field; it does not (and structurally cannot, from a browser) check
+  whether that path actually exists on the user's disk, download anything, or verify the DB is really there.
+  Genuinely automatic RAM detection also isn't possible from a browser at all - see the feature's own writeup
+  above for why `navigator.deviceMemory`'s 8 GB cap makes this fundamentally a rough hint, not a fact.
+- **The RAM/variant helper is Kraken2-only** - geNomad/CheckV/Bowtie2 also take a DB/reference path but don't
+  get this treatment. A deliberate scope match to what was actually asked ("when it comes to kraken..."), not
+  an oversight; the same pattern would generalize if asked for.
 
 ## Testing limitations found this pass (2026-09-13), and how they're covered instead
 

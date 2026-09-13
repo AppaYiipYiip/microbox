@@ -19,6 +19,20 @@ edges shown dashed-amber plus a warning banner, non-blocking. Also confirmed the
 already faithfully mirrors the only real per-tool params (`host_fasta`/`kraken2_db`/`genomad_db`/
 `checkv_db` - all paths, verified against `nextflow.config` directly). See "Composer canvas: connections
 validated against the real pipeline's fixed backbone..." below.
+**Kraken2 database-variant selector with a hardware-based recommendation added to the composer** — four real
+variants grounded in PLAN.md §2.3's own research (checked against `bin/download-dbs.sh`'s actual case
+statement for which are really downloadable today), a "Use this path" button per wired variant, and an
+honestly-limited RAM-based recommendation (`navigator.deviceMemory` is Chromium-only and capped at 8 GB by
+design, so it's a rough pre-fill for an editable field, never an authoritative reading) using a conservative
+50%-of-RAM rule grounded in this project's own real OOM finding. Test suite grew from 64 to 72.
+**Composer canvas: collapsible palette categories, Ctrl/Cmd+C/X/V, circular undo/redo icons, and a real
+selection-highlight bug fixed** — the owner's UI feedback ("the circular ones that mean back and forth
+cycle" for undo/redo; "i assume ctrl+c or x or z or r are working") led to building copy/cut/paste (which
+didn't exist yet) and, while testing paste, catching a real bug where the canvas kept highlighting the OLD
+node after Duplicate/Paste/Undo/Redo/Escape even though the detail panel correctly showed the new one - fixed
+with a shared selection-sync helper used everywhere the selection changes outside of a genuine click. Test
+suite grew from 62 to 64. See "Composer canvas: collapsible palette categories, more keyboard shortcuts,
+circular undo/redo icons, and a real selection-highlight bug fixed..." below.
 **Composer node palette search/filter added** (PLAN.md §6.16's nice-to-have, now that the catalog spans 13
 tools/7 categories) — matches the current UI language's translated text, hides empty categories, unit-tested
 plus verified live in both languages. Also noted a real automation constraint: browser download-confirmation
@@ -596,5 +610,89 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   behavior by intercepting `URL.createObjectURL` via a script and reading the `Blob` content directly (as
   already done for the Save→Import round-trip test above), never by actually clicking the button through to
   a real completed download. No functional change to the app.
+
+- **Composer canvas: collapsible palette categories, more keyboard shortcuts, circular undo/redo icons, and
+  a real selection-highlight bug fixed, 2026-09-13** (owner, mid-session: "instead of annuler and rétablir,
+  its better to have the arrow back and arrow forward. not the straight ones but the circular ones that mean
+  back and forth cycle. i assume ctrl+c or x or z or r are working. and many other things"). Four pieces:
+  1. **Collapsible category groups** (PLAN.md §6.16's other node-palette nice-to-have, alongside last round's
+     search) - each category header is now also a collapse/expand toggle with a rotating chevron. Collapse
+     is purely visual state: a collapsed category's tools still surface the moment a search matches them,
+     rather than staying hidden - search overrides collapse, not the other way around.
+  2. **Undo/Redo are now circular-arrow icon buttons** (↺/↻) instead of "Annuler"/"Rétablir" text, per the
+     owner's exact description - `aria-label` + a combined action-name-plus-shortcut tooltip carry the
+     accessible name now that there's no visible text.
+  3. **Ctrl/Cmd+D (duplicate), C/X/V (copy/cut/paste), and Escape (close panel)** - the owner assumed C/X/V
+     already worked; they didn't, built rather than left as a false assumption. Scoped to the single selected
+     node, same as the existing Duplicate button, not the whole multi-selection - a deliberate consistency
+     choice. Copy/cut use a component-state clipboard, not the real OS one (no cross-tab requirement here,
+     and the Clipboard API needs its own permission prompt for no benefit); repeated pastes from the same
+     copy stagger 24px apart rather than stacking exactly on top of each other. Ctrl+C deliberately does NOT
+     intercept when the browser has an active text selection elsewhere on the page, so selecting ordinary
+     page text and copying it still works normally even with a node also selected. **Deliberately NOT bound:
+     Ctrl/Cmd+R** - hijacking browser refresh is a materially more invasive choice than shadowing the other
+     shortcuts above (none of which have a real everyday use inside this SPA); left alone with no specific
+     feature to map it to, not an oversight.
+  4. **A real, previously-unnoticed selection-highlight bug found and fixed while testing paste**:
+     Duplicate/Paste/Undo/Redo/Escape/Close all update this app's own `selectedNodeId` tracker (correctly
+     driving the detail panel's content) but were never updating each node's own React-Flow-level `.selected`
+     boolean - the thing that actually drives the blue border/resize-handle overlay on the canvas via
+     `NodeProps.selected`. A real node click doesn't hit this (React Flow dispatches its own internal
+     selection change automatically on click, which our own `nodes` state already receives through
+     `onNodesChange`); only this app's own PROGRAMMATIC selection changes bypassed it. Concretely: paste
+     twice, and the detail panel correctly showed the newest pasted node's info while the canvas kept the
+     blue highlight on the original node - confirmed via the DOM (`node-1: selected=true` after the panel had
+     already moved to `node-3`), not just eyeballed. **Fix**: a shared `withNoSelection` (clears every node's
+     `.selected` in one pass, skips the update entirely if nothing needs to change) plus `clearSelection`
+     helper, used everywhere this file changes the selection outside of a genuine click - Duplicate and Paste
+     now explicitly select their new node while deselecting everything else in the same `setNodes` call;
+     Undo/Redo/Escape/Close now clear `.selected` alongside `selectedNodeId`. **Verified live in-browser,
+     re-checked via the DOM after the fix** (not unit-tested - all of these need a selected node, which needs
+     React Flow's click-to-select, the same jsdom limitation already documented): copy-then-paste-twice now
+     shows the canvas highlight correctly following the newest paste (`node-1: false`, newest node: `true`);
+     Escape closes the panel and fully clears the border; Ctrl+D creates a real second node without
+     triggering the browser's own bookmark dialog. Test suite grew from 62 to 64 (2 new `NodePalette.test.tsx`
+     cases for collapse/expand; copy/cut/paste/Escape/the selection fix aren't unit-tested, for the reason
+     above).
+
+- **Kraken2 database-variant selector with a hardware-based recommendation, 2026-09-13** (owner, same session:
+  "when it comes to kraken, it would be nice to let the user select which version they want, and have one
+  written as (recommended) based on their hardware. we automatically detect their hardware capabilities.").
+  Grounded in real project research rather than invented: `src/data/kraken2DbVariants.ts` lists the four
+  variants that are either already downloadable via `bin/download-dbs.sh` (Viral, Standard-8 - `wired: true`,
+  checked directly against that script's own case statement) or are documented near-term production
+  candidates from `docs/planning/PLAN.md` §2.3's own researched table (Standard-16, PlusPF-16 - `wired:
+  false`, since the script's case statement explicitly rejects them today: "isn't wired up yet"). Each
+  variant's RAM figure is the table's real `hash.k2d` size (0.6 / 7.45 / 14.9 / 14.9 GiB), not guessed. A
+  "Use this path" button (shown only for the two wired variants - offering a path for a DB nothing can fetch
+  yet would be actively misleading) fills the real `kraken2_db` field with `bin/download-dbs.sh`'s own
+  conventional extract-path convention (`~/microbox-dbs/kraken2/<variant>`, read directly from the script's
+  `DEFAULT_TARGET_DIR`/`EXTRACT_DIR` logic) - a copyable convention, not a claim this browser app can see the
+  user's real filesystem.
+  **On "we automatically detect their hardware capabilities" - answered honestly, not with a fake
+  reading**: a browser cannot read a machine's real total RAM. The one API that exists,
+  `navigator.deviceMemory`, is Chromium-only and deliberately rounds to a power of two AND CAPS AT 8 for
+  privacy - a machine with 8, 16, 64, or 256 GiB of RAM all report the identical "8"
+  (developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory, cited in `src/utils/
+  estimateDeviceMemory.ts`). That cap makes it structurally unable to distinguish the exact cases this
+  feature's bigger recommendations (14.9+ GiB variants) depend on - used here ONLY to pre-fill a plainly
+  editable "Available RAM" input, never shown as authoritative; when the API isn't supported at all
+  (Firefox/Safari), the field starts empty with an honest message instead of a guessed number.
+  `src/utils/recommendKraken2Db.ts` (pure, unit-tested) recommends the largest variant whose RAM requirement
+  is at most **half** of the given figure - a deliberately conservative margin grounded in this project's
+  own real finding, not an arbitrary number: on the actual 11 GiB VM this project tested on, the 7.45 GiB
+  Standard-8 DB did classify correctly, but only completely alone - running it alongside a real MEGAHIT
+  assembly OOM-killed the assembly (Docker exit 137, already documented under "Real-data validation" /
+  PLAN.md §2.3). That's ~68% utilization already proven too tight for a real run with other concurrent
+  stages; the recommendation logic's tests explicitly encode this exact case (an 11 GiB input still only
+  recommends the tiny Viral DB, not Standard-8, under the 50% rule) so the conservatism isn't just described
+  in a comment, it's asserted. **Verified live in-browser**: the real (Chromium-reported) `navigator.
+  deviceMemory` of 4 on the dev machine correctly pre-filled the RAM field and recommended Viral; editing it
+  to 32 live-updated the recommendation to Standard-16, still correctly marked "not yet downloadable"
+  (`PAS ENCORE TÉLÉCHARGEABLE`, confirmed in French); clicking "Use this path" on Viral genuinely filled the
+  real path field with `~/microbox-dbs/kraken2/viral` and the node's override dot appeared - a real update to
+  that node's actual param, not a cosmetic suggestion. Deliberately scoped to Kraken2 only (matches "when it
+  comes to kraken" exactly) - geNomad/CheckV/Bowtie2 have their own DB/reference paths but don't get this
+  treatment; the same pattern would generalize if asked for. Test suite grew from 64 to 72.
 
 - **Full toolbox combinatorics enumerated and tested, 2026-09-11 — revised same day after owner pushback (see #16 above).** The engine is a fixed backbone (fastp→FastQC→Bowtie2→MEGAHIT for `fastq`; nothing but Kraken2/QUAST for `contigs`), **not** a freely-reorderable graph (matches `docs/planning/PLAN.md` §6.10's Option A finding) — a single-tool pipeline (e.g. Kraken2 alone) works via `input_type=contigs` + `skip_quast=true` (or, since #16, the fastq-entry equivalent) only because that combination was explicitly wired, not because arbitrary node graphs are supported. First pass under-scoped the toggle count (4 flags, fastp/FastQC/MEGAHIT hardcoded on) and landed on 16 total configs; corrected same day once those three became genuinely independent toggles: **72 `fastq`-entry configurations + 4 `contigs`-entry configurations = 76 total** (PLAN.md §6.13 has the exact arithmetic). Not exhaustively tested one-by-one — no major bioinformatics test suite does that either — but every flag is toggled independently at least once and every cascading auto-skip interaction is exercised at least once in `tests/main.nf.test` (`basic` + `requires_db` tags).

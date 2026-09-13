@@ -42,6 +42,15 @@
       "malformed": "Ce fichier n'est pas un instantané de pipeline valide (champs manquants ou incorrects).",
       "unsupported-version": "Ce fichier a été enregistré dans un format que cette version du compositeur ne reconnaît pas.",
       "unknown-tool": "Ce fichier fait référence à un outil qui n'existe pas dans le catalogue de ce pipeline."
+    },
+    "kraken2": {
+      "ramLabel": "RAM disponible (Go)",
+      "ramAutoHint": "Détecté automatiquement via votre navigateur - plafonné à 8 Go et purement indicatif, les navigateurs ne révèlent volontairement pas la RAM exacte de votre machine. Modifiez cette valeur si vous connaissez le total réel.",
+      "ramManualHint": "Votre navigateur ne prend pas en charge la détection automatique de la RAM - indiquez manuellement la RAM totale de votre machine.",
+      "recommended": "Recommandé",
+      "notYetAvailable": "Pas encore téléchargeable",
+      "ramRequirement": "Nécessite ~{{ram}} Go de RAM pour être chargée",
+      "usePath": "Utiliser ce chemin"
     }
   },
   "history": {
@@ -87,5 +96,11 @@
     "maxbin2": { "name": "MaxBin2", "description": "Regroupe les contigs en bacs génomiques par organisme." },
     "multiqc": { "name": "MultiQC", "description": "Agrège les résultats de tous les outils dans un seul rapport." },
     "pavian": { "name": "Pavian", "description": "Visualiseur interactif pour explorer les rapports taxonomiques Kraken2/Bracken." }
+  },
+  "kraken2db": {
+    "viral": { "name": "Viral", "description": "Génomes viraux RefSeq uniquement - minuscule, utile pour tester la mécanique du pipeline, pas pour une vraie classification d'échantillons bactériens." },
+    "standard_08_GB": { "name": "Standard (8 Go)", "description": "Archées, bactéries, virus, plasmides, humain, UniVec, plafonné à une table de hachage de 8 Go. La base de données de validation réelle de ce projet." },
+    "standard_16_GB": { "name": "Standard (16 Go)", "description": "Même contenu que Standard (8 Go), plafonné plus haut pour une meilleure précision. Candidate de production documentée." },
+    "pluspf_16_GB": { "name": "PlusPF (16 Go)", "description": "Contenu Standard plus protozoaires et champignons, même plafond de 16 Go - recommandée pour les échantillons d'origine animale." }
   }
 }

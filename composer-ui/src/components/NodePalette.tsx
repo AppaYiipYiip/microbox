@@ -42,6 +42,21 @@ export function NodePalette() {
   // speaker searching "classification" should match the French label, not
   // need to know the English one.
   const [query, setQuery] = useState('')
+  // Collapsible category groups (PLAN.md §6.16 node-palette nice-to-have) -
+  // a category's collapsed state is only VISUALLY applied while not
+  // searching, so a collapsed category's tools still surface once they
+  // match a query rather than staying hidden; the toggle itself still works
+  // during a search (it just has no visible effect until the query clears).
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+
+  function toggleCategory(category: string) {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }
 
   const filteredByCategory = CATEGORY_ORDER.map((category) => ({
     category,
@@ -74,16 +89,31 @@ export function NodePalette() {
       {filteredByCategory.length === 0 ? (
         <p className="node-palette__no-results">{t('composer.paletteNoResults')}</p>
       ) : (
-        filteredByCategory.map(({ category, tools }) => (
-          <section key={category} className="node-palette__category">
-            <h3 className="node-palette__category-title">{t(`categories.${category}`)}</h3>
-            <div className="node-palette__cards">
-              {tools.map((tool) => (
-                <ToolCard key={tool.id} tool={tool} />
-              ))}
-            </div>
-          </section>
-        ))
+        filteredByCategory.map(({ category, tools }) => {
+          const isCollapsed = !query && collapsedCategories.has(category)
+          return (
+            <section key={category} className="node-palette__category">
+              <button
+                type="button"
+                className="node-palette__category-title"
+                onClick={() => toggleCategory(category)}
+                aria-expanded={!isCollapsed}
+              >
+                <span className={isCollapsed ? 'node-palette__category-chevron node-palette__category-chevron--collapsed' : 'node-palette__category-chevron'}>
+                  ▾
+                </span>
+                {t(`categories.${category}`)}
+              </button>
+              {!isCollapsed && (
+                <div className="node-palette__cards">
+                  {tools.map((tool) => (
+                    <ToolCard key={tool.id} tool={tool} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )
+        })
       )}
     </aside>
   )

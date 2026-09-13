@@ -42,6 +42,15 @@
       "malformed": "That file isn't a valid pipeline snapshot (missing or malformed fields).",
       "unsupported-version": "That file was saved in a format this version of the composer doesn't understand.",
       "unknown-tool": "That file references a tool that doesn't exist in this pipeline's catalog."
+    },
+    "kraken2": {
+      "ramLabel": "Available RAM (GB)",
+      "ramAutoHint": "Auto-detected via your browser - capped at 8 GB and only a rough estimate, since browsers deliberately don't expose your machine's exact RAM. Edit this if you know your actual total.",
+      "ramManualHint": "Your browser doesn't support automatic RAM detection - enter your machine's total RAM manually.",
+      "recommended": "Recommended",
+      "notYetAvailable": "Not yet downloadable",
+      "ramRequirement": "Needs ~{{ram}} GB RAM to load",
+      "usePath": "Use this path"
     }
   },
   "history": {
@@ -87,5 +96,11 @@
     "maxbin2": { "name": "MaxBin2", "description": "Groups contigs into per-organism genome bins." },
     "multiqc": { "name": "MultiQC", "description": "Aggregates every tool's output into one report." },
     "pavian": { "name": "Pavian", "description": "Interactive viewer for exploring Kraken2/Bracken taxonomic reports." }
+  },
+  "kraken2db": {
+    "viral": { "name": "Viral", "description": "RefSeq viral genomes only - tiny, good for smoke-testing pipeline mechanics, not for real classification of bacterial samples." },
+    "standard_08_GB": { "name": "Standard (8 GB)", "description": "Archaea, bacteria, viral, plasmid, human, UniVec, capped to an 8 GB hash table. This project's own real truth-validation database." },
+    "standard_16_GB": { "name": "Standard (16 GB)", "description": "Same content as Standard (8 GB), capped larger for better accuracy. Documented production candidate." },
+    "pluspf_16_GB": { "name": "PlusPF (16 GB)", "description": "Standard content plus protozoa and fungi, same 16 GB cap - recommended for animal-derived samples." }
   }
 }

@@ -15,6 +15,7 @@ import { KRAKEN2_DB_VARIANTS, conventionalKraken2DbPath } from '../data/kraken2D
 import { recommendKraken2Db } from '../utils/recommendKraken2Db'
 import { estimateDeviceMemoryGiB } from '../utils/estimateDeviceMemory'
 import { computeAutoLayout } from '../utils/autoLayout'
+import { normalizeConnection } from '../utils/normalizeConnection'
 import './ComposerPage.css'
 
 function toolName(t: (key: string) => string, toolId: string): string {
@@ -141,7 +142,11 @@ function ComposerInner() {
   const onConnect = useCallback(
     (connection: Connection) => {
       takeSnapshot()
-      setEdges((eds) => addEdge({ ...connection, type: 'deletable' }, eds))
+      // See normalizeConnection.ts - loose connectionMode lets a drag start
+      // from either a target or a source handle, so the raw connection can
+      // come back with source/target reversed relative to our fixed
+      // top/left=target, right/bottom=source roles; this puts it back.
+      setEdges((eds) => addEdge({ ...normalizeConnection(connection), type: 'deletable' }, eds))
     },
     [takeSnapshot, setEdges],
   )

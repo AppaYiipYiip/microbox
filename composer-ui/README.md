@@ -256,7 +256,7 @@ actually clicking through it, not from re-reading the requirements:
   text match, not just the name) with every non-matching category hidden, clearing restores the full list,
   and an unmatchable query shows the translated "no tools match" message. Category collapse/expand confirmed
   via `aria-expanded`, including a collapsed category's tools reappearing once a search matches them.
-- `npm test` (Vitest + React Testing Library, 81 tests) — i18n key-structure parity between `en.json`/
+- `npm test` (Vitest + React Testing Library, 91 tests) — i18n key-structure parity between `en.json`/
   `fr.json`, every catalog tool resolves to real translated text in both locales, the language toggle
   actually switches rendered text (not just a visual state), the active page-nav link gets the right class,
   route navigation actually swaps the rendered page for all three pages, every `ToolNode` renders exactly 4
@@ -403,6 +403,19 @@ directly either way).
   overwrites the estimate with the pixel-exact one. Applied to both `importCanvasSnapshot.ts` and
   `PipelineCanvas.tsx`'s palette-drop path. Verified live: the exact failing 3-node scenario now renders both
   edges immediately on import, with the disabled badge and param-override dot both correctly preserved too.
+- **Connections silently failed to draw "sometimes," requiring repeated attempts** (owner: "sometimes the
+  connection fails and i need to do it / try so many times"). Root cause: React Flow's default
+  `connectionMode="strict"` silently rejects a drag that starts and ends on two handles of the SAME declared
+  role (target-to-target/source-to-source) — with zero feedback, not even a console warning. Every node shows
+  all 4 fixed-role handles at once, so grabbing the "wrong" one is easy and looked exactly like a random,
+  unexplained failure. Fixing this took two changes, not one: switching to `connectionMode="loose"` alone
+  just traded one silent failure for another (a drag from a target handle now created a connection, but with
+  `sourceHandle`/`targetHandle` reversed relative to this app's fixed roles, which then failed to *render* -
+  `error008` in the console, same failure class as the import bug above, different cause). The real fix:
+  `isValidConnection.ts` still rejects a same-role pair (genuinely ambiguous, no fix possible), and a new
+  `normalizeConnection.ts` swaps a mixed-role pair back to the correct direction regardless of which end was
+  grabbed first. Verified live: the exact drag that used to silently produce 0 edges is now either correctly
+  rejected (same-role) or correctly rendered in the right direction (mixed-role, either drag direction).
 
 None of this is an oversight - PLAN.md §6.16 scoped this pass as "requirements + a working prototype of the
 UI shell," not a full build. See `docs/KNOWN_ISSUES.md` for the dated entry with full context.

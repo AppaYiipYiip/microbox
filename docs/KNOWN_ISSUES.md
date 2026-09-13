@@ -4,7 +4,13 @@ Living tracker so nothing found during development gets lost across machines/ses
 
 See `docs/TESTING.md` for the standing testing requirements/checklist to run after every change — researched against current backend/frontend/integration/UI-UX testing standards, 2026-09-12. See `CONTRIBUTING.md` for the concrete "how to add a tool / upgrade a dependency / add a UI feature" playbook, and `CHANGELOG.md` for a terse chronological summary of what's shipped.
 
-Last updated: 2026-09-13 (**Composer canvas: a real imported-edges-don't-render bug found and fixed** — building
+Last updated: 2026-09-13 (**Composer canvas: connections silently failing "sometimes" root-caused and fixed** —
+React Flow's default `connectionMode="strict"` was silently rejecting any drag that grabbed a handle of the
+"wrong" role, with zero feedback; switching to `loose` mode alone just traded that for a different silent
+failure (a malformed edge that couldn't render), so the real fix normalizes the connection's source/target
+back to this app's fixed handle roles regardless of which end was grabbed. Test suite grew from 81 to 91. See
+"Composer canvas: connections silently failed to draw..." below.
+**Composer canvas: a real imported-edges-don't-render bug found and fixed** — building
 a fuller integration test (a real multi-node chain, disabled node, param set, exported, re-imported) surfaced a
 genuine React Flow gotcha: edges connecting brand-new nodes silently never render because the library can't yet
 measure their real handle positions, and never self-corrects afterward either. Fixed via React Flow's own
@@ -777,3 +783,43 @@ window-level modifier-key tracking). Test suite grew from 25 to 31; see "Compose
   finite coordinates) - the render-time behavior itself is browser-only and can't be jsdom-tested, same
   established split as every other React-Flow-interaction-dependent behavior in this project. Test suite grew
   from 78 to 81.
+
+- **Composer canvas: connections silently failed to draw "sometimes," requiring repeated attempts, 2026-09-13**
+  (owner: "why im having issues connecting fastqc to fastp ? sometimes the connection fails and i need to do
+  it / try so many times"). Root-caused by reading React Flow's own bundled source
+  (`@xyflow/system`'s `isValidHandle`): React Flow's default `connectionMode="strict"` (never explicitly set
+  in this project before now) silently rejects any drag that starts and ends on two handles of the SAME
+  declared role (target-to-target or source-to-source) - with **zero visual feedback explaining why**, not
+  even a console warning. Every `ToolNode` always shows all 4 fixed-role handles at once (top/left target,
+  right/bottom source, added 2026-09-13 per owner spec), so grabbing the "wrong" one by habit or visual
+  proximity is easy and completely silent when it happens - reproduced and confirmed live: a drag from one
+  node's target handle to another node's target handle created exactly 0 edges, every time, while the
+  "correct" direction (source to target) worked every time from the identical two nodes.
+  **First fix attempt (incomplete on its own):** setting `connectionMode="loose"` on `<ReactFlow>`
+  (`PipelineCanvas.tsx`) lets a drag start from either handle role - but on its own this just traded one
+  silent failure for another: a drag started from a target handle now DOES create a connection, but React
+  Flow's own loose-mode logic assigns `sourceHandle`/`targetHandle` based on which end the drag started at,
+  not which one is actually source-typed - so the resulting edge could end up with e.g. `sourceHandle: "left"`
+  (a target-only id in this app's fixed scheme), which then fails to RENDER (confirmed live via a real
+  console warning, `error008: Couldn't create edge for source handle id: "left"`) - same failure class as the
+  2026-09-13 import bug, different root cause. **Real, complete fix:** two small, deterministic changes, since
+  this app's 4 handle ids and their roles are fixed and globally known (`HANDLE_SIDES`, now the single shared
+  source of truth in `src/data/nodeDefaults.ts` - `ToolNode.tsx` renders its actual handles from this same
+  array instead of a separate local copy, closing a real duplication risk along the way):
+  1. `src/utils/isValidConnection.ts` now also rejects a same-role pair (target-to-target/source-to-source) -
+     genuinely ambiguous, no direction can be inferred, so this must still fail (cleanly, via React Flow's own
+     validity check during the drag - the connection line just doesn't snap green - rather than creating a
+     broken edge that silently never renders).
+  2. `src/utils/normalizeConnection.ts` (new, unit-tested) swaps a mixed-role connection (one target, one
+     source handle, dragged in either direction) back to the correct fixed direction before it's added to
+     state, in `ComposerPage.tsx`'s `onConnect` - so a user who happens to grab the "wrong" end of a valid
+     pair still gets a correctly-rendered, correctly-directed edge, not a failure.
+  **Verified live in-browser, exactly reproducing the original bug report**: the identical target-to-target
+  drag that previously created 0 edges is now correctly and cleanly rejected (still 0 edges, but this is now
+  the genuinely correct behavior for an ambiguous gesture, not a bug); the same drag but ending on a SOURCE
+  handle instead (started at a target, ended at a source - the "reverse" of the normal gesture) now succeeds
+  and renders a correctly-directed edge, confirmed via its real edge id
+  (`xy-edge__node-2right-node-1top` - source/sourceHandle correctly resolved to the actual source-typed
+  handle regardless of which end was grabbed first); no `error008` warnings in the console for the new edge.
+  New regression coverage: `src/utils/handleRole.test.ts` (3 tests), `src/utils/normalizeConnection.test.ts`
+  (3 tests), plus 4 new cases in `src/utils/isValidConnection.test.ts`. Test suite grew from 81 to 91.

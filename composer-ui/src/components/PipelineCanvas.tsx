@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   Controls,
+  ConnectionMode,
   useReactFlow,
   type Connection,
   type Edge,
@@ -139,6 +140,24 @@ export function PipelineCanvas({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         isValidConnection={isValidConnection}
+        // React Flow's own default is `Strict`, which silently drops a
+        // connection whenever the drag starts and ends on two same-role
+        // handles (target->target or source->source) - with zero visual
+        // feedback explaining why. Every node here always shows all 4
+        // fixed-role handles at once (top/left target, right/bottom
+        // source), so grabbing the "wrong" one by habit or visual proximity
+        // is easy, and did it silently fail with no error - reported
+        // 2026-09-13 (owner: "sometimes the connection fails and i need to
+        // do it / try so many times"), reproduced and confirmed live: a
+        // target-to-target drag created 0 edges under Strict, every time.
+        // `Loose` accepts a drag between any two handles regardless of
+        // declared role (only rejecting a handle connecting to itself,
+        // already covered by isValidConnection above) - the resulting
+        // edge's source/target still resolve sensibly (React Flow treats
+        // whichever end has the "source" role as source), so this doesn't
+        // weaken the fixed-direction visual design, it just stops a mis-
+        // grabbed handle from failing with no explanation.
+        connectionMode={ConnectionMode.Loose}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}

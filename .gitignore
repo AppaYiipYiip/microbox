@@ -17,6 +17,16 @@ nf-test
 # it rather than track it, same as .venv-ui below)
 .venv-nfcore/
 
+# nf-core-tools' newer multi-arch/multi-engine container-selection convention
+# auto-regenerates these on every `nf-core modules install` - confirmed
+# unreferenced anywhere in the actual config chain (Fixed #20, re-confirmed
+# 2026-09-13 after they silently reappeared following a later module install
+# and got committed by accident) - every module here already handles
+# per-engine container selection internally via its own conditional
+# `container` line. Ignored, not just periodically deleted, so this can't
+# regress a third time.
+conf/containers_*.config
+
 # Python
 __pycache__/
 *.pyc

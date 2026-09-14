@@ -14,6 +14,20 @@ include { BRACKEN_BRACKEN  } from '../modules/nf-core/bracken/bracken/main'
 // on a second include, the standard nf-core pattern for reusing a module.
 include { KRAKEN2_KRAKEN2 as KRAKEN2_KRAKEN2_PREDEPLETION } from '../modules/nf-core/kraken2/kraken2/main'
 include { BRACKEN_BRACKEN as BRACKEN_BRACKEN_PREDEPLETION } from '../modules/nf-core/bracken/bracken/main'
+// Real, maintained visualization tool-chain for Kraken2's own report - researched
+// 2026-09-14 (full-UI-architecture Phase 4b, §6.17's own reference-image requirement)
+// rather than assumed: KrakenTools' kreport2krona.py converts a Kraken2 report into
+// Krona's tab-hierarchy text format, then KronaTools' ktImportText renders a real,
+// standalone interactive HTML radial chart from it - no external taxonomy database
+// needed (unlike ktImportTaxonomy), since kreport2krona already resolves names into
+// the text hierarchy itself. Both are real nf-core modules with BioContainers images,
+// already used together this exact way by nf-core/taxprofiler in production - not a
+// homegrown chart, reused tooling like everything else in this pipeline. Sankey
+// (the pipeline's OTHER reference-image chart) was researched the same way and found
+// to have no comparably maintained static-output tool - owner decision 2026-09-14:
+// Krona only for now, Sankey deferred (docs/planning/PLAN.md, this plan's Phase 4b).
+include { KRAKENTOOLS_KREPORT2KRONA } from '../modules/nf-core/krakentools/kreport2krona/main'
+include { KRONA_KTIMPORTTEXT        } from '../modules/nf-core/krona/ktimporttext/main'
 include { GENOMAD_ENDTOEND } from '../modules/nf-core/genomad/endtoend/main'
 include { CHECKV_ENDTOEND  } from '../modules/nf-core/checkv/endtoend/main'
 include { QUAST            } from '../modules/nf-core/quast/main'
@@ -293,6 +307,16 @@ workflow MICROBOX {
             false  // save_reads_assignment
         )
         ch_kraken2_report = KRAKEN2_KRAKEN2.out.report.map { meta, f -> f }
+
+        // Real Krona radial chart (full-UI-architecture Phase 4b, §6.17) - not
+        // independently skippable, same "runs automatically whenever its real input
+        // exists" pattern as QUAST auto-running off assembled contigs: this is a cheap,
+        // always-useful view of a stage that already ran, not a separate decision the
+        // user needs to make. Deliberately only wired for this post-depletion pass for
+        // now, not the pre-depletion pass below or WGS's own Kraken2 pass - a real,
+        // explicit follow-on (docs/planning/PLAN.md), not an oversight.
+        KRAKENTOOLS_KREPORT2KRONA(KRAKEN2_KRAKEN2.out.report)
+        KRONA_KTIMPORTTEXT(KRAKENTOOLS_KREPORT2KRONA.out.txt)
 
         // Bracken re-estimates abundance from Kraken2's report - needs the
         // *same* DB directory, which the pre-built genome-idx downloads

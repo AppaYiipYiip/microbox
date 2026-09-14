@@ -1,7 +1,9 @@
+import { useContext } from 'react'
 import { Handle, NodeResizer, type NodeProps, type Node } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 import { HANDLE_SIDES } from '../data/nodeDefaults'
+import { RunStatusContext } from './RunStatusContext'
 import './ToolNode.css'
 
 // Custom React Flow node - PLAN.md §6.16: nodes must be "clickable and
@@ -22,10 +24,15 @@ export type ToolNodeType = Node<ToolNodeData, 'tool'>
 export function ToolNode({ data, selected }: NodeProps<ToolNodeType>) {
   const { t } = useTranslation()
   const tool = TOOL_CATALOG.find((tl) => tl.id === data.toolId)
+  const runStatuses = useContext(RunStatusContext)
   if (!tool) return null
 
   const isEnabled = data.enabled !== false
   const overriddenParams = (tool.params ?? []).filter((param) => (data.params[param.key] ?? '').trim().length > 0)
+  // undefined = no run yet, or this run hasn't reached this tool - no badge at all,
+  // same as before Phase 4 added this. Real per-node live status, not a build-time
+  // concept - see RunStatusContext.ts for why this stays out of `data` entirely.
+  const runStatus = runStatuses[tool.id]
 
   // Tooltip shows CURRENT values, not just the static description - PLAN.md
   // §6.11's Pipeline-page refinement: "tooltips should show current values,
@@ -36,10 +43,12 @@ export function ToolNode({ data, selected }: NodeProps<ToolNodeType>) {
   for (const param of overriddenParams) {
     tooltipLines.push(`${t(param.labelKey)}: ${data.params[param.key]}`)
   }
+  if (runStatus) tooltipLines.push(t(`composer.runStatus.${runStatus}`))
 
   const classNames = ['tool-node']
   if (selected) classNames.push('tool-node--selected')
   if (!isEnabled) classNames.push('tool-node--disabled')
+  if (runStatus) classNames.push(`tool-node--run-${runStatus}`)
 
   return (
     <div className={classNames.join(' ')} title={tooltipLines.join('\n')}>
@@ -59,6 +68,9 @@ export function ToolNode({ data, selected }: NodeProps<ToolNodeType>) {
         />
       ))}
       {!isEnabled && <div className="tool-node__skipped-badge">{t('composer.skippedBadge')}</div>}
+      {isEnabled && runStatus && (
+        <div className={`tool-node__run-badge tool-node__run-badge--${runStatus}`}>{t(`composer.runStatus.${runStatus}`)}</div>
+      )}
       <div className="tool-node__category">{t(`categories.${tool.category}`)}</div>
       <div className="tool-node__name">
         {t(tool.nameKey)}

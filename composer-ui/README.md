@@ -1,9 +1,12 @@
-# composer-ui — pipeline composer prototype
+# composer-ui — pipeline composer
 
-**Status: the Composer itself is a prototype/research artifact - its own Run button is still disabled, and
-it does not generate or execute a real pipeline configuration** (that's the FastAPI/`-with-weblog` backend
-described in PLAN.md §6.12, a separate, not-yet-built piece). Built 2026-09-13 to answer
-`docs/planning/PLAN.md` §6.16's requirements list with a real, working proof of concept, not a mockup.
+**Status, updated 2026-09-14 (full-UI-architecture Phase 3, `~/.claude/plans/jazzy-shimmying-wolf.md`):
+Composer's own Run button is real now - it launches an actual pipeline run** via the real FastAPI backend
+(`server/`, PLAN.md §6.12's design, built across Phases 1-3) and the real UI-to-engine converter
+(`src/utils/pipelineConverter.ts`). Everything below this banner describing the Run button as "still
+disabled" or the Composer as a prototype-only research artifact reflects the state as of 2026-09-13/earlier -
+left as an honest historical record (same append-only convention as `docs/KNOWN_ISSUES.md`), not rewritten.
+See docs/KNOWN_ISSUES.md entry 26 and the plan file above for what changed and why.
 Composer-ui is still a **separate React application** from the existing Streamlit thin launcher (`ui/`) - see
 `docs/planning/PLAN.md` §6.10 for why (Streamlit's server-rendered model is a poor fit for a Figma-like
 drag/connect canvas) - **but as of 2026-09-13 the two are no longer reached via separate ports**: this app's

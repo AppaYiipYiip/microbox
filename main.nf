@@ -1,16 +1,58 @@
 #!/usr/bin/env nextflow
 
 include { MICROBOX } from './workflows/microbox'
+include { WGS      } from './workflows/wgs'
 
 workflow {
 
     main:
-    // Multiple entry points (PLAN.md §6.7: "any element can be first").
-    // params.input_type picks which samplesheet shape to expect and which
-    // stages are even applicable - a raw-FASTQ run and a contigs-only run
-    // are fundamentally different starting points, not the same channel
-    // with some stages skipped.
-    if (params.input_type == 'fastq') {
+    // Which pipeline runs at all (docs/planning/PLAN.md §6.9 - promoted
+    // 2026-09-14 from "evaluated, not built" to an owner-directed
+    // requirement: "option A is more work but more reward"). Metagenomics
+    // (default) and pathogen/isolate WGS are deliberately SIBLING pipelines,
+    // not one pipeline with a branch bolted on - they answer different
+    // scientific questions and need different samplesheet shapes (fastq/
+    // contigs vs. a WGS isolate sheet), so this selector picks which one
+    // runs, then everything below is unchanged/new respectively - the
+    // existing input_type fastq/contigs branching is untouched, just nested
+    // one level deeper under the metagenomics arm.
+    if (params.pipeline == 'metagenomics') {
+        // Multiple entry points (PLAN.md §6.7: "any element can be first").
+        // params.input_type picks which samplesheet shape to expect and which
+        // stages are even applicable - a raw-FASTQ run and a contigs-only run
+        // are fundamentally different starting points, not the same channel
+        // with some stages skipped.
+        if (params.input_type == 'fastq') {
+            ch_samplesheet = Channel
+                .fromPath(params.input, checkIfExists: true)
+                .splitCsv(header: true)
+                .map { row ->
+                    def meta  = [ id: row.sample, single_end: !row.fastq_2 ]
+                    def reads = meta.single_end
+                        ? [ file(row.fastq_1, checkIfExists: true) ]
+                        : [ file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true) ]
+                    [ meta, reads ]
+                }
+        } else if (params.input_type == 'contigs') {
+            ch_samplesheet = Channel
+                .fromPath(params.input, checkIfExists: true)
+                .splitCsv(header: true)
+                .map { row -> [ [ id: row.sample ], file(row.contigs, checkIfExists: true) ] }
+        } else {
+            error "params.input_type must be 'fastq' or 'contigs', got: ${params.input_type}"
+        }
+
+        MICROBOX(ch_samplesheet)
+    } else if (params.pipeline == 'wgs') {
+        // Isolate WGS samplesheet shape (assets/schema_input_wgs.json) -
+        // deliberately just sample/fastq_1/fastq_2, same shape as
+        // metagenomics' own fastq entry point, since both start from raw
+        // paired/single-end reads; they diverge in what runs on them next; not
+        // reused via a shared code path because that would couple the two
+        // pipelines' samplesheet schemas together for a resemblance that's
+        // coincidental today and not guaranteed to stay true (e.g. a future
+        // per-row reference-genome column here would have no metagenomics
+        // equivalent).
         ch_samplesheet = Channel
             .fromPath(params.input, checkIfExists: true)
             .splitCsv(header: true)
@@ -21,16 +63,11 @@ workflow {
                     : [ file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true) ]
                 [ meta, reads ]
             }
-    } else if (params.input_type == 'contigs') {
-        ch_samplesheet = Channel
-            .fromPath(params.input, checkIfExists: true)
-            .splitCsv(header: true)
-            .map { row -> [ [ id: row.sample ], file(row.contigs, checkIfExists: true) ] }
-    } else {
-        error "params.input_type must be 'fastq' or 'contigs', got: ${params.input_type}"
-    }
 
-    MICROBOX(ch_samplesheet)
+        WGS(ch_samplesheet)
+    } else {
+        error "params.pipeline must be 'metagenomics' or 'wgs', got: ${params.pipeline}"
+    }
 
     // Self-contained run report - crucial requirement, PLAN.md §6.2 (owner,
     // 2026-09-11), covering TWO things every run must leave behind, not just

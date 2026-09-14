@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Thin wrapper so the team never types Nextflow flags directly.
-# Usage: ./bin/run.sh <samplesheet.csv> [--profile dev|test|prod] [--outdir <dir>]
+# Usage: ./bin/run.sh <samplesheet.csv> [--profile dev|test|prod] [--pipeline metagenomics|wgs] [--outdir <dir>]
 set -euo pipefail
 
 # Ensure Java/Nextflow are on PATH regardless of how this script was invoked
@@ -32,15 +32,53 @@ if [[ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
   set -u
 fi
 
-SAMPLESHEET="${1:?Usage: run.sh <samplesheet.csv> [--profile <env>] [--outdir <dir>]}"
+SAMPLESHEET="${1:?Usage: run.sh <samplesheet.csv> [--profile <env>] [--pipeline metagenomics|wgs] [--outdir <dir>] [--weblog-url <url>] [--extra-params-file <path>]}"
 shift
 
 PROFILE="dev"
+PIPELINE="metagenomics"
 OUTDIR=""
+WEBLOG_URL=""
+EXTRA_PARAMS_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile)
       PROFILE="${2:?--profile needs a value}"
+      shift 2
+      ;;
+    --pipeline)
+      # Threads straight to params.pipeline (main.nf, nextflow.config) - see
+      # docs/planning/PLAN.md §6.9. Default 'metagenomics' preserves this
+      # script's existing behavior for every caller that predates the WGS
+      # sibling pipeline (ui/app.py included) - no flag, no change.
+      PIPELINE="${2:?--pipeline needs a value (metagenomics|wgs)}"
+      shift 2
+      ;;
+    --extra-params-file)
+      # Optional - full-architecture Phase 3 (~/.claude/plans/jazzy-shimmying-wolf.md,
+      # item 1: the UI-to-engine converter). server/main.py writes the real
+      # skip_*/param values Composer's canvas produced to a YAML file and
+      # passes it here, as a SECOND -params-file after the profile's own
+      # (params/${PROFILE}.yaml, if any) - Nextflow merges multiple
+      # -params-file arguments key-by-key, later wins, so Composer's explicit
+      # choices override the profile's defaults for the keys it sets while
+      # every other profile-level setting (input fixtures, resource caps for
+      # the test profile) is untouched. Omitted entirely = today's behavior,
+      # unchanged (every caller that predates Phase 3, ui/app.py included).
+      EXTRA_PARAMS_FILE="${2:?--extra-params-file needs a value}"
+      shift 2
+      ;;
+    --weblog-url)
+      # Optional - full-architecture Phase 2 (docs/planning/PLAN.md §6.12,
+      # ~/.claude/plans/jazzy-shimmying-wolf.md). Passed straight to
+      # Nextflow's own -with-weblog so server/main.py's /api/telemetry
+      # receiver gets live per-process events while a run is in progress.
+      # Never the source of truth for a run's FINAL state (Nextflow's own
+      # last event can drop on exit, per the seandavi/nextflow_telemetry
+      # reference implementation this was modeled on) - only for live
+      # progress while it's running. Omitted entirely = today's behavior,
+      # unchanged (every caller that predates Phase 2, ui/app.py included).
+      WEBLOG_URL="${2:?--weblog-url needs a value}"
       shift 2
       ;;
     --outdir)
@@ -79,9 +117,19 @@ if [[ -f "params/${PROFILE}.yaml" ]]; then
   PARAMS_FILE_ARG=(-params-file "params/${PROFILE}.yaml")
 fi
 
+EXTRA_PARAMS_FILE_ARG=()
+if [[ -n "$EXTRA_PARAMS_FILE" ]]; then
+  EXTRA_PARAMS_FILE_ARG=(-params-file "$EXTRA_PARAMS_FILE")
+fi
+
 OUTDIR_ARG=()
 if [[ -n "$OUTDIR" ]]; then
   OUTDIR_ARG=(--outdir "$OUTDIR")
+fi
+
+WEBLOG_ARG=()
+if [[ -n "$WEBLOG_URL" ]]; then
+  WEBLOG_ARG=(-with-weblog "$WEBLOG_URL")
 fi
 
 # Exit status captured via PIPESTATUS (nextflow's, not tee's) and the `set
@@ -94,7 +142,10 @@ set +e
 nextflow run main.nf \
   -profile "${PROFILE},docker" \
   "${PARAMS_FILE_ARG[@]}" \
+  "${EXTRA_PARAMS_FILE_ARG[@]}" \
   "${OUTDIR_ARG[@]}" \
+  "${WEBLOG_ARG[@]}" \
+  --pipeline "$PIPELINE" \
   --input "$SAMPLESHEET" \
   -resume 2>&1 | tee "$LOG_FILE"
 NF_EXIT="${PIPESTATUS[0]}"

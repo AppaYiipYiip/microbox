@@ -23,6 +23,23 @@
   gap: 0.5rem;
 }
 
+.composer-page__family {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #bbb;
+}
+
+.composer-page__family select {
+  background: #262626;
+  border: 1px solid #3a3a3a;
+  color: #eee;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
 .composer-page__btn {
   background: #262626;
   border: 1px solid #3a3a3a;

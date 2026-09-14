@@ -29,7 +29,25 @@
     "downloadImage": "Télécharger l'image",
     "downloadImageHint": "Télécharge une image PNG de la zone de travail actuelle, telle que dessinée.",
     "run": "Lancer",
-    "runDisabledHint": "Pas encore connecté au pipeline - ce bouton est un espace réservé.",
+    "runDisabledHint": "Ajoutez au moins un outil à la zone de travail avant de lancer.",
+    "familyLabel": "Pipeline",
+    "familyMetagenomics": "Métagénomique",
+    "familyWgs": "WGS / Isolat",
+    "runDialog": {
+      "title": "Lancer ce pipeline",
+      "samplesheetLabel": "Feuille d'échantillons (CSV)",
+      "profileLabel": "Environnement",
+      "profileDev": "dev",
+      "profileTest": "test",
+      "profileProd": "prod",
+      "cancel": "Annuler",
+      "launch": "Lancer",
+      "launching": "Lancement...",
+      "needsSamplesheet": "Choisissez d'abord une feuille d'échantillons CSV.",
+      "error": "Impossible de lancer l'analyse. Vérifiez que le backend est démarré (server/main.py) et réessayez.",
+      "success": "Analyse démarrée ({{runId}}). Suivez sa progression dans l'historique des analyses.",
+      "viewHistory": "Aller à l'historique des analyses"
+    },
     "noParams": "Aucun paramètre configurable pour cet outil pour le moment.",
     "deleteConnection": "Supprimer la connexion",
     "undo": "Annuler",
@@ -38,6 +56,11 @@
     "enabled": "Activé",
     "skippedBadge": "Ignoré",
     "skippedTooltip": "Ignoré - cette étape ne sera pas exécutée.",
+    "runStatus": {
+      "running": "En cours",
+      "completed": "Terminé",
+      "failed": "Échec"
+    },
     "autoArrange": "Organiser",
     "autoArrangeHint": "Organise les nœuds en lignes selon leurs connexions, de haut en bas.",
     "import": "Importer",
@@ -66,11 +89,14 @@
     "placeholder": "Aucune analyse n'est encore terminée. Une fois une analyse terminée depuis la page Lancer le pipeline, elle apparaîtra ici automatiquement.",
     "generatedAt": "Rapport généré le {{date}}",
     "reportTitle": "Rapport du pipeline",
+    "perToolResults": "Résultats par outil",
     "backToList": "← Retour à la liste",
     "columnDate": "Date",
     "columnStatus": "Statut",
     "columnActions": "Actions",
     "statusReady": "Rapport prêt",
+    "statusRunning": "En cours...",
+    "statusFailed": "Échec",
     "statusNoReport": "Pas de rapport (l'analyse a peut-être échoué)",
     "view": "Voir",
     "export": "Exporter",
@@ -80,8 +106,10 @@
   "categories": {
     "qc": "Contrôle qualité et découpage des lectures",
     "hostDepletion": "Déplétion de l'hôte",
+    "alignment": "Alignement sur référence",
     "assembly": "Assemblage et contrôle qualité de l'assemblage",
     "classification": "Classification taxonomique",
+    "variantCalling": "Appel de variants",
     "viralDiscovery": "Découverte virale et plasmidique",
     "binning": "Regroupement génomique (binning)",
     "reporting": "Rapport"
@@ -114,6 +142,22 @@
       "params": { "checkv_db": "Chemin de la base de données CheckV" }
     },
     "maxbin2": { "name": "MaxBin2", "description": "Regroupe les contigs en bacs génomiques par organisme." },
+    "bwamem2": {
+      "name": "BWA-MEM2",
+      "description": "Aligne les lectures sur un unique génome de référence pour l'appel de variants.",
+      "params": { "wgs_reference_fasta": "FASTA du génome de référence (chemin ou URL)" }
+    },
+    "kraken2wgs": {
+      "name": "Kraken2 (préliminaire)",
+      "description": "Dépistage d'espèce/contamination sur les lectures brutes, avant l'alignement."
+    },
+    "mash": {
+      "name": "Mash Screen",
+      "description": "Vérification rapide d'espèce/contamination par distance génomique contre une base de données RefSeq.",
+      "params": { "mash_refseq_db": "Chemin de la base de données Mash RefSeq" }
+    },
+    "seqkit": { "name": "seqkit stats", "description": "Statistiques résumées du nombre/longueur/qualité des lectures." },
+    "gatk4": { "name": "GATK4", "description": "Appelle les variants par rapport à la référence (HaplotypeCaller + GenotypeGVCFs, mode GVCF)." },
     "multiqc": { "name": "MultiQC", "description": "Agrège les résultats de tous les outils dans un seul rapport." },
     "pavian": { "name": "Pavian", "description": "Visualiseur interactif pour explorer les rapports taxonomiques Kraken2/Bracken." }
   },

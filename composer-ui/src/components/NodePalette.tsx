@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CATEGORY_ORDER, toolsByCategory, type ToolDefinition } from '../data/toolCatalog'
+import { CATEGORY_ORDER, toolsByCategory, type ToolDefinition, type ToolFamily } from '../data/toolCatalog'
 import { matchesSearch } from '../utils/paletteSearch'
 import './NodePalette.css'
 
@@ -34,9 +34,13 @@ function ToolCard({ tool }: { tool: ToolDefinition }) {
   )
 }
 
-export function NodePalette() {
+// `family` (full-UI-architecture Phase 3) filters the palette to the pipeline shape
+// Composer's own family selector currently has active - undefined (the direct-render
+// tests' own default) shows every tool from both families, unfiltered, same as before
+// Phase 3 added a second pipeline family at all.
+export function NodePalette({ family }: { family?: ToolFamily } = {}) {
   const { t } = useTranslation()
-  const grouped = toolsByCategory()
+  const grouped = toolsByCategory(family)
   // Search matches against the CURRENT language's translated name/
   // description (not the English source strings or raw tool id) - a French
   // speaker searching "classification" should match the French label, not

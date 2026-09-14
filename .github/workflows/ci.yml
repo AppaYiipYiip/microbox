@@ -39,7 +39,14 @@ jobs:
           sudo mv nf-test /usr/local/bin/nf-test
           nf-test version
 
-      - name: Run the basic-tagged nf-test suite (12 tests, no DB downloads)
+      # 19 tests as of the WGS sibling pipeline's Phase 4 (PLAN.md §6.9) -
+      # both metagenomics and WGS basic-tagged tests run in this ONE
+      # invocation under the same --profile test,docker (each test
+      # overrides params.pipeline/params.input directly in its own `when`
+      # block, tests/main.nf.test's own established convention) - no
+      # separate --profile test_wgs invocation needed, despite an earlier
+      # implementation-plan draft assuming one would be.
+      - name: Run the basic-tagged nf-test suite (19 tests, no DB downloads)
         run: nf-test test tests/main.nf.test --tag basic --profile test,docker
 
   ui-tests:
@@ -60,6 +67,25 @@ jobs:
 
       - name: pytest + Streamlit AppTest (matches docs/TESTING.md §2.2)
         run: pytest ui/test_app.py -v
+
+  server-tests:
+    name: Backend static analysis + pytest suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dev dependencies (fastapi, uvicorn, pytest, ruff - pinned)
+        run: pip install -r server/requirements-dev.txt
+
+      - name: ruff
+        run: ruff check server/main.py server/test_main.py
+
+      - name: pytest (real FastAPI TestClient, isolated tmp_path - see server/test_main.py's own header)
+        run: pytest server/test_main.py -v
 
   shell-lint:
     name: shellcheck all bin/ scripts

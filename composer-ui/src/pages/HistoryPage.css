@@ -112,3 +112,56 @@
   border-radius: 4px;
   background: #fff;
 }
+
+/* Full-UI-architecture Phase 4b: real per-tool result files, lazy-loaded (only fetched
+   once a run is actually selected - §6.17 critique #7). <details> gives free
+   collapse/expand and keyboard accessibility (§6.17 requirement #8) with zero JS. */
+.history-page__results {
+  margin-top: 1rem;
+  flex-shrink: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.history-page__results h2 {
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+  color: #ccc;
+}
+
+.history-page__result-group {
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.history-page__result-group summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #eee;
+}
+
+.history-page__result-count {
+  color: #888;
+  font-size: 0.75rem;
+}
+
+.history-page__result-group ul {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+
+.history-page__result-group li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  padding: 0.15rem 0;
+}
+
+.history-page__result-size {
+  color: #888;
+  white-space: nowrap;
+}

@@ -1,25 +1,64 @@
 #!/usr/bin/env bash
 # Downloads and verifies a reference database, per PLAN.md §2.3.
 # Usage: ./bin/download-dbs.sh <variant> [target_dir]
-#   variant: viral, standard_08_GB (Kraken2), checkv (CheckV), genomad (geNomad)
+#   variant: viral, standard_08_GB (Kraken2), checkv (CheckV), genomad (geNomad),
+#            mash_refseq (Mash RefSeq sketch DB, WGS pipeline pre-flight screening)
 #            - others land here as later milestones need them, see
 #            docs/planning/PLAN.md §2.3 for the full variant table and URLs.
-#   target_dir: defaults per-family (~/microbox-dbs/<kraken2|checkv|genomad>,
+#   target_dir: defaults per-family (~/microbox-dbs/<kraken2|checkv|genomad|mash>,
 #               deliberately outside the repo - DBs are never committed,
 #               PLAN.md §6.3 Git hygiene - and outside /mnt/c, same
 #               ext4-not-Windows-mount reasoning as workDir,
 #               docs/KNOWN_ISSUES.md #9)
 set -euo pipefail
 
-VARIANT="${1:?Usage: download-dbs.sh <variant> [target_dir]  (variants: viral, standard_08_GB, checkv, genomad)}"
+VARIANT="${1:?Usage: download-dbs.sh <variant> [target_dir]  (variants: viral, standard_08_GB, checkv, genomad, mash_refseq)}"
 
 case "$VARIANT" in
   viral|standard_08_GB) DEFAULT_TARGET_DIR="$HOME/microbox-dbs/kraken2" ;;
   checkv)                DEFAULT_TARGET_DIR="$HOME/microbox-dbs/checkv" ;;
   genomad)               DEFAULT_TARGET_DIR="$HOME/microbox-dbs/genomad" ;;
+  mash_refseq)           DEFAULT_TARGET_DIR="$HOME/microbox-dbs/mash" ;;
   *)                     DEFAULT_TARGET_DIR="$HOME/microbox-dbs/$VARIANT" ;;
 esac
 TARGET_DIR="${2:-$DEFAULT_TARGET_DIR}"
+
+# Mash's RefSeq sketch DB (PLAN.md §6.9, WGS pipeline pre-flight species/
+# contamination screening) - a single static .msh file, not a .tar.gz
+# archive, so it gets its own early branch rather than forcing it through
+# the generic curl+sha256+tar-extract shape below (that shape assumes an
+# archive to extract; this file is used as-is). Real, official, verified
+# reachable 2026-09-14 (HTTP 200, Content-Length 754,115,096 bytes) -
+# checksum pinned from this project's own first download, same "no vendor-
+# published plain sha256 exists" reasoning as the Kraken2 variants below
+# (Mash's own site publishes no checksum for this file either).
+if [[ "$VARIANT" == "mash_refseq" ]]; then
+  mkdir -p "$TARGET_DIR"
+  URL="https://gembox.cbcb.umd.edu/mash/refseq.genomes.k21s1000.msh"
+  SHA256="7a0279d8846050d0514f79883a4c82b0d1d29e41329b734edb65098dbf672be4"
+  DEST="$TARGET_DIR/refseq.genomes.k21s1000.msh"
+
+  if [[ -f "$DEST" ]]; then
+    echo "Already downloaded: $DEST"
+  else
+    echo "Downloading $URL (~754MB) ..."
+    curl -L -C - -o "$DEST" "$URL"
+  fi
+
+  echo "Verifying checksum..."
+  ACTUAL_SHA256=$(sha256sum "$DEST" | cut -d' ' -f1)
+  if [[ "$ACTUAL_SHA256" != "$SHA256" ]]; then
+    echo "CHECKSUM MISMATCH for $DEST" >&2
+    echo "  expected: $SHA256" >&2
+    echo "  actual:   $ACTUAL_SHA256" >&2
+    exit 1
+  fi
+  echo "Checksum OK."
+
+  echo ""
+  echo "Set params.mash_refseq_db to: $DEST"
+  exit 0
+fi
 
 # geNomad and CheckV both use their own tool's official downloader rather
 # than a direct curl against a static URL:

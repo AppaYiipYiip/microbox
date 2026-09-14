@@ -10,6 +10,33 @@ yet (`nextflow.config`'s `manifest.version` is still `0.1.0`), so everything to 
 ## [Unreleased]
 
 ### Added
+- `--pipeline metagenomics|wgs` selector (`main.nf`) and a new `workflows/wgs.nf` sibling pipeline for
+  pathogen/isolate WGS (PLAN.md §6.9). Phase 1: plumbing/samplesheet schema. **Phase 2: first real tool
+  stage — BWA-MEM2 reference-guided alignment (`--skip_bwamem2 false --wgs_reference_fasta <path>`) +
+  samtools stats for real MultiQC content**, tested against real *Staphylococcus aureus* sequencing data
+  (ERR044595 vs. reference NC_007795.1, ~90.7% mapping rate). Off by default; real bacterial-scale resource
+  measurement done (peak RSS ~708 MB for alignment) but not yet decisive for multi-sample/production scale
+  (docs/KNOWN_ISSUES.md #23). **Phase 3: pre-flight species/contamination screening** — Kraken2 (reused
+  from the metagenomics module/DB, `--skip_kraken2_wgs false`) and Mash Screen against a real external
+  RefSeq sketch DB (`--skip_mash false --mash_refseq_db <path>`, `bin/download-dbs.sh mash_refseq`), kept
+  independently toggleable rather than an either/or after research showed both are genuinely used in real
+  bacterial WGS QC for different reasons. Also `seqkit stats` (`--skip_seqkit_stats false`) for real
+  read-level QC in MultiQC. Real tested against *S. aureus* data: Mash correctly identifies the exact
+  reference genome (identity 1.0). **Mash's real measured peak RAM (~6GB) is a genuine concern** on
+  constrained machines — stays off by default (docs/KNOWN_ISSUES.md #24). BLAST+ remains a deferred
+  follow-on. **Phase 4: variant calling** — GATK4 HaplotypeCaller in GVCF mode + GenotypeGVCFs
+  (`--skip_gatk4 false`), the GATK best-practices shape (per-sample GVCF now, real cross-sample joint
+  genotyping addable later without recalling). Real tested: 37,491 called variants against
+  *S. aureus* data, including a confirmed real SNP (NC_007795.1:89 C>T). **Fixed a real data-corruption bug
+  along the way** — HaplotypeCaller and GenotypeGVCFs originally shared one output filename, silently
+  emptying the real GVCF (docs/KNOWN_ISSUES.md #25). True cross-sample combining (GenomicsDBImport) and
+  DeepVariant/FreeBayes remain deferred follow-ons. This completes the WGS sibling pipeline's
+  module-by-module build (Phases 1–4). **Phase 5: full assembly** — all five WGS stages (Kraken2, Mash,
+  seqkit, BWA-MEM2, GATK4) verified running together for the first time, real content confirmed across all
+  of them simultaneously including a combined MultiQC report and complete tool-version provenance; no new
+  bugs found. One honest gap: the final full-suite regression re-run was deferred mid-run (slow, not
+  failed) to a more capable machine (docs/KNOWN_ISSUES.md Open #10). Remaining work is Phase 6 (docs/CI/bin
+  script wiring).
 - Default metagenomics pipeline: fastp → FastQC → Bowtie2 host depletion → assembly → Kraken2/Bracken
   classification → QUAST assembly QC → geNomad viral/plasmid discovery → CheckV genome quality → MaxBin2
   genome binning → MultiQC.
@@ -38,9 +65,10 @@ yet (`nextflow.config`'s `manifest.version` is still `0.1.0`), so everything to 
   this file.
 - `docs/SBOM.md` — a full SBOM/license inventory (all pinned container images + the UI's Python
   environment), generated with `syft`.
-- `composer-ui/` — a prototype node-based pipeline composer (separate React app: React Flow, React
-  Router v8, react-i18next). Categorized draggable node palette, a working canvas, multi-page nav, live
-  French/English switching. Not yet connected to actually running the pipeline — see its own README.md.
+- `composer-ui/` — a node-based pipeline composer (separate React app: React Flow, React Router v8,
+  react-i18next). Categorized draggable node palette, a working canvas, multi-page nav, live French/English
+  switching. Initially prototype-only; now genuinely connected to running the real pipeline (see the
+  `server/` entry above) — see its own README.md.
 - `.github/workflows/ci.yml` — CI wiring: the `basic` nf-test suite, UI `ruff`/`pytest`, `shellcheck`, and a
   `gitleaks` secrets scan, on every push/PR.
 - `ui/requirements-dev.txt` — pinned dev tooling (`pytest`, `ruff`) for the UI, installed automatically by
@@ -49,6 +77,24 @@ yet (`nextflow.config`'s `manifest.version` is still `0.1.0`), so everything to 
   reads right after trimming/QC, before host depletion, alongside the existing post-depletion pass
   (`skip_kraken2`). Matches a real reference pipeline diagram provided by the project's R&D team, where
   Kraken2 is fed directly by FastQC's reads as its primary path.
+- `server/` — a real FastAPI backend replacing `composer-ui`'s dev-only results-serving plugin
+  (`serve-results-plugin.ts`, retired). Run list/serve/delete (identical URL contract, zero HistoryPage
+  code changes needed), real run launching (`POST /api/runs`, reuses `bin/run.sh`), live per-run status via
+  Nextflow's `-with-weblog` (`bin/run.sh --weblog-url`, `/api/telemetry/{run_id}`), and Composer's real
+  UI-to-engine converter (`composer-ui/src/utils/pipelineConverter.ts`) feeding a real `--extra-params-file`
+  through to Nextflow. Composer's Run button is no longer a permanently-disabled placeholder — it launches
+  real runs (both metagenomics and WGS, via a new pipeline-family selector and WGS tools added to the
+  palette). Run History shows real live status (Running/Ready/Failed) with 5s polling while a run is active.
+  See docs/KNOWN_ISSUES.md #26 for two real bugs found and fixed along the way (a zombie-process status bug,
+  a confirmed-harmless `-with-weblog` deprecation warning). **Composer canvas nodes now highlight live
+  running/done/failed status during a real run**, matched against Nextflow's own per-process weblog events
+  (`composer-ui/src/utils/nodeRunStatus.ts`) - kept out of the canvas's persisted Save/Export/undo state via
+  a dedicated React context, not mixed into it. **A real per-tool results panel** on Run History's detail
+  view - lazily-fetched, collapsible file list per tool (`server/main.py`'s new
+  `GET /reports-api/runs/{id}/files`, `composer-ui/src/utils/groupRunFiles.ts`), the values/table half of
+  §6.17's results view. Chart rendering (Sankey/Krona) is a separate, not-yet-built follow-on - real research
+  confirmed a maintained, drop-in nf-core module chain exists for Krona; no comparably maintained option
+  exists for Sankey (open decision, see `docs/planning/PLAN.md`).
 
 ### Changed
 - `README.md` rewritten to reflect the project's actual current (functional, validated) state.

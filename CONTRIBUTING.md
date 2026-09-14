@@ -53,7 +53,11 @@ recipe rather than inventing a new pattern:
    pattern) or explicitly note in a comment why the report gap is acceptable — don't silently leave a
    report-less tool.
 6. **Add a `publishDir` entry** in `conf/modules.config` so its output actually reaches `results/<tool>/`
-   instead of staying buried in Nextflow's hashed work directory.
+   instead of staying buried in Nextflow's hashed work directory. **Adding a tool to the WGS sibling
+   pipeline instead** (`workflows/wgs.nf`, PLAN.md §6.9)? Its `publishDir`/`ext.args`/resource overrides go
+   in `conf/modules_wgs.config`, a separate file from the metagenomics pipeline's `conf/modules.config` - a
+   real, easy mistake to make out of habit if you've edited `conf/modules.config` before, since both files
+   are loaded unconditionally and a block in the wrong one just silently never matches instead of erroring.
 7. **Measure its real resource needs — don't trust the advertised nf-core label.** Run it for real (toy
    fixture first, real-scale data if you have it) while watching `free -h`/`docker stats`. If it needs more
    than the `test` profile's general cap, add a `withName: 'YOUR_PROCESS'` block with its own

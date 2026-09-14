@@ -29,7 +29,25 @@
     "downloadImage": "Download Image",
     "downloadImageHint": "Downloads a PNG picture of the current canvas, exactly as drawn.",
     "run": "Run",
-    "runDisabledHint": "Not connected to the pipeline yet - this button is a placeholder.",
+    "runDisabledHint": "Add at least one tool to the canvas before running.",
+    "familyLabel": "Pipeline",
+    "familyMetagenomics": "Metagenomics",
+    "familyWgs": "WGS / Isolate",
+    "runDialog": {
+      "title": "Run this pipeline",
+      "samplesheetLabel": "Samplesheet (CSV)",
+      "profileLabel": "Environment",
+      "profileDev": "dev",
+      "profileTest": "test",
+      "profileProd": "prod",
+      "cancel": "Cancel",
+      "launch": "Launch",
+      "launching": "Launching...",
+      "needsSamplesheet": "Choose a samplesheet CSV first.",
+      "error": "Couldn't launch the run. Check the backend is running (server/main.py) and try again.",
+      "success": "Run started ({{runId}}). Track its progress on the Run History page.",
+      "viewHistory": "Go to Run History"
+    },
     "noParams": "No configurable parameters for this tool yet.",
     "deleteConnection": "Delete connection",
     "undo": "Undo",
@@ -38,6 +56,11 @@
     "enabled": "Enabled",
     "skippedBadge": "Skipped",
     "skippedTooltip": "Skipped - this stage will not run.",
+    "runStatus": {
+      "running": "Running",
+      "completed": "Done",
+      "failed": "Failed"
+    },
     "autoArrange": "Auto-arrange",
     "autoArrangeHint": "Arranges nodes into rows based on their connections, top to bottom.",
     "import": "Import",
@@ -66,11 +89,14 @@
     "placeholder": "No run has completed yet. Once a run finishes on the Run Pipeline page, it will show up here automatically.",
     "generatedAt": "Report generated {{date}}",
     "reportTitle": "Pipeline report",
+    "perToolResults": "Results by tool",
     "backToList": "← Back to list",
     "columnDate": "Date",
     "columnStatus": "Status",
     "columnActions": "Actions",
     "statusReady": "Report ready",
+    "statusRunning": "Running...",
+    "statusFailed": "Failed",
     "statusNoReport": "No report (run may have failed)",
     "view": "View",
     "export": "Export",
@@ -80,8 +106,10 @@
   "categories": {
     "qc": "Read QC & Trimming",
     "hostDepletion": "Host Depletion",
+    "alignment": "Reference Alignment",
     "assembly": "Assembly & Assembly QC",
     "classification": "Taxonomic Classification",
+    "variantCalling": "Variant Calling",
     "viralDiscovery": "Viral & Plasmid Discovery",
     "binning": "Genome Binning",
     "reporting": "Reporting"
@@ -114,6 +142,22 @@
       "params": { "checkv_db": "CheckV database path" }
     },
     "maxbin2": { "name": "MaxBin2", "description": "Groups contigs into per-organism genome bins." },
+    "bwamem2": {
+      "name": "BWA-MEM2",
+      "description": "Aligns reads to a single reference genome for variant calling.",
+      "params": { "wgs_reference_fasta": "Reference genome FASTA (path or URL)" }
+    },
+    "kraken2wgs": {
+      "name": "Kraken2 (pre-flight)",
+      "description": "Species/contamination screening on raw reads, before alignment."
+    },
+    "mash": {
+      "name": "Mash Screen",
+      "description": "Fast genome-distance species/contamination check against a RefSeq sketch database.",
+      "params": { "mash_refseq_db": "Mash RefSeq sketch database path" }
+    },
+    "seqkit": { "name": "seqkit stats", "description": "Read count/length/quality summary statistics." },
+    "gatk4": { "name": "GATK4", "description": "Calls variants against the reference (HaplotypeCaller + GenotypeGVCFs, GVCF mode)." },
     "multiqc": { "name": "MultiQC", "description": "Aggregates every tool's output into one report." },
     "pavian": { "name": "Pavian", "description": "Interactive viewer for exploring Kraken2/Bracken taxonomic reports." }
   },

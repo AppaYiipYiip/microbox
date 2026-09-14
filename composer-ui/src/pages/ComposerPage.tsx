@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { ReactFlowProvider, useNodesState, useEdgesState, addEdge, getNodesBounds, getViewportForBounds, type Connection, type Edge } from '@xyflow/react'
 import { toPng } from 'html-to-image'
 import { NodePalette } from '../components/NodePalette'
@@ -16,7 +17,14 @@ import { recommendKraken2Db } from '../utils/recommendKraken2Db'
 import { estimateDeviceMemoryGiB } from '../utils/estimateDeviceMemory'
 import { computeAutoLayout } from '../utils/autoLayout'
 import { normalizeConnection } from '../utils/normalizeConnection'
+import { convertCanvasToParams } from '../utils/pipelineConverter'
+import { deriveToolRunStatuses, type ToolRunStatus } from '../utils/nodeRunStatus'
+import { RunStatusContext } from '../components/RunStatusContext'
 import './ComposerPage.css'
+
+// Narrower than data/toolCatalog.ts's own ToolFamily ('shared' only makes sense as a
+// per-tool tag, never as a whole-canvas selection - there is no "shared" pipeline).
+type PipelineFamily = 'metagenomics' | 'wgs'
 
 // React Flow's own per-node `.selected` boolean (what actually drives the
 // blue border/resize-handle overlay on the canvas, via NodeProps.selected)
@@ -118,6 +126,16 @@ function ComposerInner() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
   const selectedTool = selectedNode ? TOOL_CATALOG.find((tool) => tool.id === selectedNode.data.toolId) : null
+
+  // Full-UI-architecture Phase 3, item 1: which fixed pipeline shape the converter
+  // targets and the palette filters to (default matches nextflow.config's own
+  // params.pipeline default). Switching family does NOT remove existing canvas nodes
+  // from the other family - the converter (utils/pipelineConverter.ts) simply ignores
+  // any node whose tool isn't in the currently-selected family, same as it already
+  // ignores a disabled node. A user switching families mid-build keeps their old
+  // nodes visible (nothing destructive happens silently) but should expect them to
+  // have no effect on the launched run until they switch back.
+  const [pipelineFamily, setPipelineFamily] = useState<PipelineFamily>('metagenomics')
 
   // Kraken2 DB variant helper (owner, 2026-09-13: "let the user select
   // which version they want, and have one written as (recommended) based
@@ -418,10 +436,104 @@ function ComposerInner() {
     [takeSnapshot, setNodes, setEdges],
   )
 
+  // Full-UI-architecture Phase 3, item 2: the real samplesheet input step Composer had
+  // no equivalent of before this - the canvas only ever held tool nodes/params, never a
+  // file to actually run against. A per-tool DB/reference-path param (wgs_reference_fasta
+  // included, same treatment as bowtie2's existing host_fasta) is a host filesystem path
+  // the pipeline reads directly, not something that needs uploading - only the reads
+  // samplesheet CSV itself does, since bin/run.sh takes it as a real file argument
+  // (POST /api/runs's own `samplesheet: UploadFile`, server/main.py).
+  const [runDialogOpen, setRunDialogOpen] = useState(false)
+  const [runSamplesheet, setRunSamplesheet] = useState<File | null>(null)
+  const [runProfile, setRunProfile] = useState<'dev' | 'test' | 'prod'>('test')
+  const [runState, setRunState] = useState<
+    { status: 'idle' | 'submitting' } | { status: 'error'; message: string } | { status: 'success'; runId: string }
+  >({ status: 'idle' })
+
+  const openRunDialog = useCallback(() => {
+    setRunState({ status: 'idle' })
+    setRunDialogOpen(true)
+  }, [])
+
+  const closeRunDialog = useCallback(() => {
+    setRunDialogOpen(false)
+    setRunSamplesheet(null)
+    setRunState({ status: 'idle' })
+  }, [])
+
+  // Full-UI-architecture Phase 4 ("per-node live status on the canvas"): once a run has
+  // actually launched, poll its real status and highlight the canvas - same 5s cadence
+  // as Run History's own live poll (HistoryPage.tsx), and the same rationale: short
+  // enough to feel live, long enough not to hammer the backend for a single local user.
+  // `activeRunId` is set on a successful launch and cleared once the run reaches a
+  // terminal state (or the user starts a new one) - polling an already-finished run
+  // forever would be pure waste.
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [toolRunStatuses, setToolRunStatuses] = useState<Record<string, ToolRunStatus>>({})
+
+  useEffect(() => {
+    if (!activeRunId) return
+    let cancelled = false
+    const poll = () => {
+      fetch(`/api/runs/${activeRunId}`)
+        .then((response) => {
+          if (!response.ok) throw new Error('status check failed')
+          return response.json() as Promise<{ status: string; processes: Record<string, string> }>
+        })
+        .then((data) => {
+          if (cancelled) return
+          setToolRunStatuses(deriveToolRunStatuses(data.processes))
+          if (data.status === 'completed' || data.status === 'failed') setActiveRunId(null)
+        })
+        // A transient network hiccup shouldn't kill the whole polling loop - just skip
+        // this tick and try again next interval, same as HistoryPage's own loadRuns.
+        .catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [activeRunId])
+
+  const launchRun = useCallback(() => {
+    if (!runSamplesheet) {
+      setRunState({ status: 'error', message: t('composer.runDialog.needsSamplesheet') })
+      return
+    }
+    setRunState({ status: 'submitting' })
+    setToolRunStatuses({}) // a fresh launch starts with a clean canvas, not the last run's leftover badges
+    const params = convertCanvasToParams(pipelineFamily, nodes)
+    const body = new FormData()
+    body.set('samplesheet', runSamplesheet)
+    body.set('profile', runProfile)
+    body.set('pipeline', pipelineFamily)
+    body.set('params', JSON.stringify(params))
+
+    fetch('/api/runs', { method: 'POST', body })
+      .then((response) => {
+        if (!response.ok) throw new Error('launch failed')
+        return response.json() as Promise<{ run_id: string; pid: number }>
+      })
+      .then((data) => {
+        setRunState({ status: 'success', runId: data.run_id })
+        setActiveRunId(data.run_id)
+      })
+      .catch(() => setRunState({ status: 'error', message: t('composer.runDialog.error') }))
+  }, [runSamplesheet, runProfile, pipelineFamily, nodes, t])
+
   return (
     <div className="composer-page">
       <div className="composer-page__toolbar">
         <h1 className="composer-page__title">{t('composer.title')}</h1>
+        <label className="composer-page__family">
+          <span>{t('composer.familyLabel')}</span>
+          <select value={pipelineFamily} onChange={(e) => setPipelineFamily(e.target.value as PipelineFamily)}>
+            <option value="metagenomics">{t('composer.familyMetagenomics')}</option>
+            <option value="wgs">{t('composer.familyWgs')}</option>
+          </select>
+        </label>
         <div className="composer-page__actions">
           <button
             type="button"
@@ -476,13 +588,65 @@ function ComposerInner() {
           <button
             type="button"
             className="composer-page__btn composer-page__btn--primary"
-            disabled
-            title={t('composer.runDisabledHint')}
+            disabled={nodes.length === 0}
+            title={nodes.length === 0 ? t('composer.runDisabledHint') : undefined}
+            onClick={openRunDialog}
           >
             {t('composer.run')}
           </button>
         </div>
       </div>
+      {runDialogOpen && (
+        <div className="composer-page__warning" role="dialog" aria-label={t('composer.runDialog.title')}>
+          <p className="composer-page__warning-title">{t('composer.runDialog.title')}</p>
+          {runState.status === 'success' ? (
+            <>
+              <p>{t('composer.runDialog.success', { runId: runState.runId })}</p>
+              <div className="composer-page__actions">
+                <Link className="composer-page__btn" to="/history">
+                  {t('composer.runDialog.viewHistory')}
+                </Link>
+                <button type="button" className="composer-page__btn" onClick={closeRunDialog}>
+                  {t('composer.runDialog.cancel')}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="composer-page__param-field">
+                <span>{t('composer.runDialog.samplesheetLabel')}</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => setRunSamplesheet(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <label className="composer-page__param-field">
+                <span>{t('composer.runDialog.profileLabel')}</span>
+                <select value={runProfile} onChange={(e) => setRunProfile(e.target.value as 'dev' | 'test' | 'prod')}>
+                  <option value="dev">{t('composer.runDialog.profileDev')}</option>
+                  <option value="test">{t('composer.runDialog.profileTest')}</option>
+                  <option value="prod">{t('composer.runDialog.profileProd')}</option>
+                </select>
+              </label>
+              {runState.status === 'error' && <p className="composer-page__warning-title">{runState.message}</p>}
+              <div className="composer-page__actions">
+                <button type="button" className="composer-page__btn" onClick={closeRunDialog}>
+                  {t('composer.runDialog.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="composer-page__btn composer-page__btn--primary"
+                  disabled={runState.status === 'submitting'}
+                  onClick={launchRun}
+                >
+                  {runState.status === 'submitting' ? t('composer.runDialog.launching') : t('composer.runDialog.launch')}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
       {importError && (
         <div className="composer-page__warning composer-page__warning--error" role="alert">
           <p className="composer-page__warning-title">{t(`composer.importError.${importError}`)}</p>
@@ -490,19 +654,21 @@ function ComposerInner() {
       )}
       <div className="composer-page__layout">
         <div className="composer-page__canvas-area">
-          <PipelineCanvas
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectNode={setSelectedNodeId}
-            onBeforeDelete={handleBeforeDelete}
-            onNodesDelete={handleNodesDelete}
-            onNodeDragStart={takeSnapshot}
-            onSelectionDragStart={takeSnapshot}
-            onBeforeAddNode={takeSnapshot}
-          />
+          <RunStatusContext.Provider value={toolRunStatuses}>
+            <PipelineCanvas
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onSelectNode={setSelectedNodeId}
+              onBeforeDelete={handleBeforeDelete}
+              onNodesDelete={handleNodesDelete}
+              onNodeDragStart={takeSnapshot}
+              onSelectionDragStart={takeSnapshot}
+              onBeforeAddNode={takeSnapshot}
+            />
+          </RunStatusContext.Provider>
           {selectedNode && selectedTool && (
             <aside className="composer-page__detail" aria-label={t('composer.nodeSelected')}>
               <div className="composer-page__detail-actions">
@@ -591,7 +757,7 @@ function ComposerInner() {
             </aside>
           )}
         </div>
-        <NodePalette />
+        <NodePalette family={pipelineFamily} />
       </div>
     </div>
   )

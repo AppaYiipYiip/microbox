@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "https://raw.githubusercontent.com/AppaYiipYiip/microbox/main/assets/schema_input_wgs.json",
+  "title": "microbox WGS pipeline - params.input schema",
+  "description": "Schema for the samplesheet passed to --input when --pipeline wgs. Deliberately minimal - one row per isolate, no patient/lane/tumor-normal columns (single-organism haploid isolate sequencing, not sarek-style clinical multi-lane human WGS). The reference genome is a single pipeline-wide params.wgs_reference_fasta, not a per-row column, since a WGS run is normally many isolates of the same organism against one reference (PLAN.md docs/planning/PLAN.md section 6.9). NOTE, same as the two existing metagenomics schemas (schema_input.json / schema_input_contigs.json): this file is documentation of the expected shape, not wired to a validation plugin anywhere in this repo yet (no nf-schema/nf-validation, no validateParameters() call) - flagged as an open follow-up, not silently assumed to be enforced.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "sample": {
+        "type": "string",
+        "pattern": "^\\S+$",
+        "errorMessage": "Sample name must be provided and cannot contain spaces"
+      },
+      "fastq_1": {
+        "type": "string",
+        "format": "file-path",
+        "pattern": "^\\S+\\.f(ast)?q\\.gz$",
+        "errorMessage": "FastQ file for reads 1 must be provided, cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
+      },
+      "fastq_2": {
+        "type": "string",
+        "format": "file-path",
+        "pattern": "^\\S+\\.f(ast)?q\\.gz$",
+        "errorMessage": "FastQ file for reads 2 cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
+      }
+    },
+    "required": ["sample", "fastq_1"]
+  }
+}

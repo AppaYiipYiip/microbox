@@ -4,16 +4,20 @@ import { ReactFlow, ReactFlowProvider } from '@xyflow/react'
 import { I18nextProvider } from 'react-i18next'
 import i18n from '../i18n/i18n'
 import { ToolNode, type ToolNodeType } from './ToolNode'
+import { RunStatusContext } from './RunStatusContext'
+import type { ToolRunStatus } from '../utils/nodeRunStatus'
 
 const NODE_TYPES = { tool: ToolNode }
 
-function renderNode(nodes: ToolNodeType[]) {
+function renderNode(nodes: ToolNodeType[], runStatuses: Record<string, ToolRunStatus> = {}) {
   return render(
     <I18nextProvider i18n={i18n}>
       <ReactFlowProvider>
-        <div style={{ width: 400, height: 400 }}>
-          <ReactFlow nodes={nodes} edges={[]} nodeTypes={NODE_TYPES} />
-        </div>
+        <RunStatusContext.Provider value={runStatuses}>
+          <div style={{ width: 400, height: 400 }}>
+            <ReactFlow nodes={nodes} edges={[]} nodeTypes={NODE_TYPES} />
+          </div>
+        </RunStatusContext.Provider>
       </ReactFlowProvider>
     </I18nextProvider>,
   )
@@ -79,5 +83,27 @@ describe('ToolNode', () => {
     const nodes: ToolNodeType[] = [{ id: 'n1', type: 'tool', position: { x: 0, y: 0 }, data: { toolId: 'kraken2', params: {} } }]
     const { container } = renderNode(nodes)
     expect(container.querySelector('.tool-node__param-dot')).toBeNull()
+  })
+
+  // Full-UI-architecture Phase 4: live per-node run status, sourced from RunStatusContext
+  // (deliberately not `data` - see RunStatusContext.ts for why).
+  it('shows a real live "Running" badge when RunStatusContext reports this tool running', () => {
+    const nodes: ToolNodeType[] = [{ id: 'n1', type: 'tool', position: { x: 0, y: 0 }, data: { toolId: 'fastp', params: {} } }]
+    const { container, getByText } = renderNode(nodes, { fastp: 'running' })
+    expect(container.querySelector('.tool-node')).toHaveClass('tool-node--run-running')
+    expect(getByText('Running')).toBeInTheDocument()
+  })
+
+  it('shows no run badge at all when the context has no status for this tool', () => {
+    const nodes: ToolNodeType[] = [{ id: 'n1', type: 'tool', position: { x: 0, y: 0 }, data: { toolId: 'fastp', params: {} } }]
+    const { queryByText } = renderNode(nodes, { kraken2: 'completed' }) // a different tool
+    expect(queryByText('Done')).toBeNull()
+  })
+
+  it('a disabled/skipped node never shows a run badge, even if the context has a status for it', () => {
+    const nodes: ToolNodeType[] = [{ id: 'n1', type: 'tool', position: { x: 0, y: 0 }, data: { toolId: 'fastp', params: {}, enabled: false } }]
+    const { queryByText, getByText } = renderNode(nodes, { fastp: 'failed' })
+    expect(queryByText('Failed')).toBeNull()
+    expect(getByText('Skipped')).toBeInTheDocument() // the skipped badge still shows instead
   })
 })

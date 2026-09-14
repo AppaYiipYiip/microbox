@@ -474,9 +474,175 @@ An independent review raised 18 concerns. Disposition of each (all accepted or e
 
 Two items require the company (not the owner): #12 (composition GUI deviation — state it explicitly) and #14 (DB sensitivity trade-off — scientist sign-off at the real-data phase). Both are recorded; neither blocks Phase 1.
 
-### 6.9 WGS extensibility — evaluated 2026-09-11, not in MVP scope
+### 6.9 WGS extensibility — evaluated 2026-09-11; **promoted to a real requirement 2026-09-14, not yet scoped/built**
 
-**Question raised by the owner:** can this toolbox also do whole-genome sequencing (WGS), not just metagenomics? **Yes** — the Nextflow DSL2 + nf-core module architecture (§6.7) genuinely generalizes beyond metagenomics. This was fact-checked the same way as the rest of this document, not taken on faith — the claim as originally proposed got some specifics right and some wrong; corrections below.
+**Status update, 2026-09-14 (owner directive): "option A is more work but more reward. a better result at the
+end. go ahead and write that in the plan."** This followed a three-way scope choice laid out the same day
+(§9.4's tool-catalogue discussion, in-conversation not yet in this doc verbatim) between (A) building this
+section's pathogen/isolate WGS branch for real, (B) only exposing the tools already running hidden inside
+other containers (samtools, HMMER, DIAMOND, Prodigal — §9.3) as their own standalone nodes in the *existing*
+metagenomics pipeline, or (C) wiring in every §9.3 candidate tool as an available module regardless of which
+workflow uses it yet. **Owner picked (A)** — this section's pathogen/isolate WGS sibling pipeline moves from
+"evaluated, deliberately not built" to an actual requirement. (B) is smaller, self-contained, and still a
+reasonable near-term pickup, but is *not* what was chosen this round — recorded here so it isn't confused
+with what's actually in scope now.
+
+**Also corrected the same day: this project will not be used commercially.** The licensing analysis below
+(GATK4/Bactopia/DeepVariant license checks, the §9.3 "no copyleft surprises that would block the company's
+commercial use" framing) was done under a commercial-use assumption that no longer holds. None of that
+research is wrong or wasted — every tool checked is still fine (MIT/BSD/Apache-2.0/BSD-3-Clause, one GPLv3),
+and it's actually a *more* permissive situation now, not less — but the "why we checked" framing throughout
+§6.9/§9.3 is now stricter than this project actually needs. Not rewriting that history, just flagging it so
+a future reader doesn't think a commercial constraint is still driving tool choice here.
+
+**Build started 2026-09-14, plan approved (`~/.claude/plans/fluffy-wishing-sprout.md`), Phase 1 of 6
+complete and verified — plumbing only, honestly reported as such, not more finished than it is.**
+`main.nf` gained a `params.pipeline = 'metagenomics' | 'wgs'` selector (existing `input_type` fastq/contigs
+branching nested unchanged under the metagenomics arm); `workflows/wgs.nf`, `conf/modules_wgs.config`,
+`conf/test_wgs.config`, and `assets/schema_input_wgs.json` were added. **Zero real WGS tool modules exist
+yet** — running `--pipeline wgs` today deliberately `error`s with "WGS pipeline has no tool stages
+implemented yet," verified via a real nf-test case (`tests/main.nf.test`, tag `basic`) asserting exactly
+that failure, not a fake pass. Full existing metagenomics suite (14 tests) re-run and confirmed green
+alongside it — no regression from the `params.pipeline` restructuring. Real finding during this phase,
+worth carrying forward for Phase 2+: `Channel.topic('versions')` (the provenance pattern `workflows/
+microbox.nf` uses) only reliably closes-when-empty when a real, invoked module in the SAME running
+workflow could write to it — with zero WGS modules yet, and `MICROBOX`'s own modules never invoked when
+`pipeline=wgs`, a first attempt at reusing that pattern silently never fired at all (`workflow.success`
+stayed `true` despite zero tasks ever running), and a value-channel workaround on top of that then hit a
+second real finding: MultiQC itself exits `0` with no `multiqc_report.html` written at all when given
+nothing to genuinely aggregate — full details, including why this is the SAME degenerate case `workflows/
+microbox.nf` already guards against rather than a new problem, in `docs/KNOWN_ISSUES.md`'s "Fixed" #22.
+**Phase 2 complete and verified, same day: BWA-MEM2 reference-guided alignment + samtools stats, the
+first real WGS tool stage.** `skip_bwamem2`/`wgs_reference_fasta` params, `BWAMEM2_INDEX`/`BWAMEM2_MEM`/
+`SAMTOOLS_STATS` wired into `workflows/wgs.nf`, real `publishDir`/`ext.args2` config in `conf/
+modules_wgs.config`.
+
+**Correction, same day - a real fixture was wrongly called "too large" from file size alone, without
+testing it, and the owner caught it ("how is 58mb too large? are you sure about that?").** First pass
+checked `nf-core/bacass`'s own real test fixture (`ERR044595`, ~115MB total R1+R2), assumed it was too
+large for a fast test, and substituted this repo's own tiny SARS-CoV-2/Lambda-phage mechanics fixture
+instead - without actually running it to check. **Wrong, corrected once actually measured**: downloads in
+~19s, BWA-MEM2 indexes and aligns all 1M read pairs in ~20-26s on the 2cpu/6GB test ceiling - comparable to
+or faster than this repo's own existing MaxBin2 test (~80s). `ERR044595` is real ENA-cataloged
+*Staphylococcus aureus* data; its matching reference (`NC_007795.1`, verified via a real 90.7%-vs-0.15%
+mapping-rate comparison, not assumed) is now what `assets/samplesheet_wgs_test.csv`/`conf/test_wgs.config`
+actually use - real biological validation, not a mechanics stand-in. Real resource usage on THIS real
+fixture (`execution_trace.txt`): peak RSS 33.1/707.9/8.2 MB for index/align/stats - comfortably under the
+~7GB ceiling for one sample, though multiple parallel samples or a larger genome aren't measured. This is
+real, meaningful evidence for the owner's "on by default" question now, not decisive on its own (one
+sample, one organism) - `skip_bwamem2` stays `true` by default; take these numbers back to the owner rather
+than deciding unilaterally. **Lesson recorded for this project generally**: verify a fixture's feasibility
+by actually running it, not by eyeballing a file size - see `docs/KNOWN_ISSUES.md` #23 for the full
+before/after.
+
+A real fixture with a *known expected variant* (needed specifically for Phase 4's GATK4 test, a stronger
+requirement than Phase 2's own mapping-rate check) remains a separate open item. Two real nf-test cases
+added and passing (15 total suite-wide). Full writeup: `docs/KNOWN_ISSUES.md` #23.
+
+**Phase 3 complete and verified, same day: pre-flight species/contamination screening.** Scoped only after
+being asked to verify real-world usefulness first ("google to make sure we would be providing something
+useful, not wasting time") - research found Kraken2 is the more common primary QC gate in real bacterial
+WGS pipelines than Mash, but Mash is genuinely field-used for a different signal (fast genome-distance/
+plasmid-transmission detection). **Owner decision: keep both, independently toggleable** rather than an
+either/or - `skip_kraken2_wgs` (reuses the existing metagenomics Kraken2 module/DB via an `as`-aliased
+include, not a new module) and `skip_mash` (against a real external RefSeq sketch DB,
+`bin/download-dbs.sh mash_refseq`), plus `skip_seqkit_stats`. BLAST+ stays deferred. Several real bugs found
+only by actually running the wiring, not by re-reading docs: `mash/sketch` turned out to have no role at all
+(mash screen's query should be raw reads, not a pre-built sketch - a first version's wiring failed with
+mash's own "reading inputs" error, fixed by removing `mash/sketch` entirely); Mash initially had zero
+MultiQC contribution, which broke the pipeline's own "nothing enabled" guard for a legitimate single-stage
+run (fixed with a real custom-content summary, not a workaround); that summary's first version also
+captured the wrong column (a machine accession filename instead of the human-readable organism name).
+**One real, materially concerning resource finding**: Mash screening the real RefSeq DB peaked at **6GB**
+RAM - right at the edge of this dev machine's actual available headroom, a bigger risk than Phase 2's
+BWA-MEM2 findings and worth weighing heavily against any near-term "on by default" decision independent of
+the still-open general question below. Also downloaded the geNomad and CheckV DBs for real this session (at
+owner request, to re-verify a previously-failing pre-existing test) - found a second, genuinely unrelated
+pre-existing issue: that test's own 9GB resourceLimits override exceeds this machine's real ~6.5GB available
+RAM right now, an environment constraint outside this phase's scope, left untouched. Three real nf-test
+cases added (two `requires_db`, one `basic`), all asserting real observed content. Full writeup:
+`docs/KNOWN_ISSUES.md` #24.
+
+**Phase 4 complete and verified, same day: GATK4 HaplotypeCaller (GVCF mode) + GenotypeGVCFs - the final
+real analysis stage of this build.** Always calls in `-ERC GVCF` mode then genotypes per-sample, the
+standard GATK best-practices shape rather than a plain single-sample VCF - deliberate, owner-directed
+("cover the broadest usecase... whatever they need we had it covered"), concretely justified since this
+pipeline's own scenario is many isolates vs. one reference, and GVCF mode costs nothing extra for today's
+one sample while keeping real cross-sample joint genotyping addable later without recalling anything. True
+cross-sample combining stays an explicit follow-on - building it now, with only one real isolate fixture to
+test against, would be an untestable abstraction. **Simplified the fixture question Phase 2 had flagged
+open**: rather than sourcing an external "known expected variant" benchmark dataset, reused the already-
+verified real `ERR044595`/`NC_007795.1` pair and ran GATK4 once to see its real output - same "run it,
+assert the real value" discipline as the rest of this build. **Three real bugs found and fixed, all by
+running the chain, not by reading docs more carefully**: GATK4 refuses a reference file with no recognized
+fasta extension (real and reachable here, since `wgs_reference_fasta` commonly points at an extension-less
+NCBI efetch URL) - fixed with a new local module (`modules/local/rename_reference`); BWA-MEM2 emits no read
+group by default, which breaks GVCF mode outright with a confusing error - fixed with a real `ext.args`
+read group; and **a genuinely serious one** - `GATK4_HAPLOTYPECALLER` and `GATK4_GENOTYPEGVCFS` both
+defaulted to the identical output filename, and `GenotypeGVCFs` writing through its own same-named staged
+input symlink silently corrupted the real GVCF data (confirmed directly: HaplotypeCaller's own log showed
+it genuinely processed the whole genome, but the file on disk ended up holding GenotypeGVCFs' own
+near-empty output instead - `exit:0`, no crash, a real data-loss bug hiding behind a clean-looking success)
+- fixed with a distinct `ext.prefix`, the exact same class of fix as this repo's existing
+`KRAKEN2_KRAKEN2_PREDEPLETION` collision fix. After the fix: 37,491 real called variants, including a
+specific real homozygous SNP (`NC_007795.1:89 C>T`) confirmed and asserted in the nf-test case. Real
+measured resource usage: `GATK4_HAPLOTYPECALLER` peak RSS 776.1 MB (3m23s real compute, by far the slowest
+single task), `GATK4_GENOTYPEGVCFS` 459.7 MB, `GATK4_CREATESEQUENCEDICTIONARY` 247.5 MB - all comfortably
+under the ~7GB dev ceiling for one sample; real production-scale verification (larger genomes, many
+samples, hours-long runs) is explicitly out of scope locally and planned for AWS instead, per the owner's
+own scope clarification earlier this section. Two real nf-test cases added and passing (18 total
+suite-wide, one genuine memory-pressure interruption mid-suite along the way - a background test run got
+killed for low system memory, unrelated to any code bug, resolved by clearing stray Docker containers and
+re-running). Full writeup: `docs/KNOWN_ISSUES.md` #25.
+
+With Phase 4 done, the module-by-module build (BWA-MEM2, Mash/Kraken2/seqkit pre-flight, GATK4 variant
+calling) is complete.
+
+**Phase 5 functionally done, same day - full assembly, all five WGS stages verified running together for
+the first time.** Each phase had already been built incrementally into the same `workflows/wgs.nf`, so the
+only genuinely new work was a real end-to-end test with everything enabled at once (Kraken2-WGS + Mash +
+seqkit + BWA-MEM2 + GATK4 together) - previously each was only tested individually or pairwise, leaving a
+real, if likely, gap: did multiple real MultiQC contributions (Kraken2's native module, Mash's custom
+summary, seqkit's native module, samtools stats' native module) actually mix into one report correctly when
+combined, not just individually? Verified directly, twice - once manually (`nextflow run`, all 12 tasks
+succeeded in 5m44s, every stage's real result independently confirmed unchanged from its own isolated test:
+same 37,491 variants, same Mash top hit, same 96.07% Kraken2-unclassified, complete real per-tool version
+provenance across all five tools in one `software_versions.yml`) and once via a new `requires_db`-tagged
+nf-test case asserting all of that as real content, which passed (369.6s). No new bugs found - Phase 5 was
+a real verification pass, not a bug hunt, and it genuinely passed.
+
+**One honest gap, not silently closed**: the final full `--tag basic` regression re-run (the last step this
+phase's plan called for, re-confirming the whole suite including metagenomics together one more time) was
+still genuinely in progress - not failed, not stuck, just slow on this dev machine - when deferred at the
+owner's direction ("seems like its taking too long... note down that we need to do this later, when i moved
+to a better pc"). Every individual piece that run would have re-confirmed already passed in separate runs
+earlier the same session (full metagenomics suite, Phase 4's two GATK4 tests, Phase 5's own new combined
+test) - genuinely low risk to defer, but recorded honestly as deferred, not claimed complete. Pick-up
+command and full reasoning: `docs/KNOWN_ISSUES.md`'s "Open" section, item 10.
+
+Remaining work is Phase 6 (docs/CI/bin-script wiring) per the approved plan; BLAST+ and true cross-sample
+joint genotyping stay deliberate, explicitly flagged follow-ons, not part of this build.
+
+**One open item flagged, not yet resolved:** whether new WGS modules default on or off. The owner's
+answer when asked was "on by default," which breaks from every other optional tool added this session
+(MaxBin2, geNomad, CheckV all default `--skip_*` = true, specifically because of this dev machine's ~7GB
+usable-RAM ceiling, [[project_dev_ram_constraint]]) — and variant-calling-grade tools (BWA-MEM2 indexing, a
+haploid variant caller) plus the Mash/BLAST+/seqkit pre-flight checks haven't had their memory footprint
+sized against that ceiling the way geNomad's `--splits 4` fix (`docs/KNOWN_ISSUES.md`) was after it actually
+OOM-killed a run.
+
+**Scope clarification, 2026-09-14 (owner, after Phase 3's real 6GB Mash measurement):** "real testing will
+be done on AWS where resources are not an issue... hitting the RAM limitation is an issue we need to ignore
+and keep trying" locally. This reframes what the ~7GB dev ceiling actually governs — it's a local
+mechanics-testing constraint (does the wiring work at all), not the basis for the final default-on/off
+decision, which belongs against AWS-scale production capacity instead. Local `requires_db` tests (Mash's
+real 6GB peak, §6.9 Phase 3, `docs/KNOWN_ISSUES.md` #24) are expected to sometimes sit close to or exceed
+this dev machine's headroom - that's a known, acceptable local limitation to keep testing around (real,
+hours-long, production-representative runs happen on AWS), not a reason to stop building, skip a stage, or
+treat a real measurement as disqualifying. Still not deciding default-on/off here - just correcting which
+environment's capacity that decision should actually be weighed against.
+
+**Question raised by the owner (2026-09-11):** can this toolbox also do whole-genome sequencing (WGS), not just metagenomics? **Yes** — the Nextflow DSL2 + nf-core module architecture (§6.7) genuinely generalizes beyond metagenomics. This was fact-checked the same way as the rest of this document, not taken on faith — the claim as originally proposed got some specifics right and some wrong; corrections below.
 
 **"WGS" hides two different projects — they need different tool stacks and fit the existing toolbox very differently:**
 
@@ -498,7 +664,7 @@ Two items require the company (not the owner): #12 (composition GUI deviation �
 
 **How it would actually sit in the repo:** not as new nodes bolted onto the existing metagenomics DAG (fastp→...→MultiQC) — it's a different scientific question with its own samplesheet schema (sarek's patient/sample/lane-style sheet vs. the metagenomics `sample,fastq_1,fastq_2`). It would be a **sibling pipeline** in the same repo, sharing the infrastructure that isn't metagenomics-specific: Docker-per-tool, pinned tags, MultiQC aggregation, the `results/` convention, provenance/trace, CI/Trivy scanning, and (with one added "which pipeline?" selector) the same thin Streamlit UI. That's a fair reading of the original claim at the infrastructure level — just not true at the "drop-in module" level implied.
 
-**Scope decision:** evaluated and documented as a **supported future extension**, not added to the Phase 1–4 task breakdown or effort estimates (§4) — the spec's MVP is metagenomics. Building it now would be scope creep unless prioritized explicitly. Which flavor (pathogen vs. host) matters for when it's picked up — see Q8, §6.6.
+**Scope decision (original, 2026-09-11):** evaluated and documented as a **supported future extension**, not added to the Phase 1–4 task breakdown or effort estimates (§4) — the spec's MVP is metagenomics. Building it now would be scope creep unless prioritized explicitly. Which flavor (pathogen vs. host) matters for when it's picked up — see Q8, §6.6. **Superseded 2026-09-14 (see status update above): pathogen/isolate WGS specifically is now an actual requirement, owner-directed** — host-animal WGS (the other flavor in the table above) is unaffected by this and stays a documented-but-unbuilt extension.
 
 Sources: [nf-core/sarek usage docs — custom FASTA, `--skip_tools baserecalibrator`](https://nf-co.re/sarek/3.5.1/docs/usage/), [nf-core/sarek GitHub — "initially designed for Human and Mouse... can work on any species with a reference genome"](https://github.com/nf-core/sarek), [Broad Institute — GATK4 open-source BSD 3-Clause announcement](https://www.broadinstitute.org/news/broad-institute-releases-open-source-gatk4-software-genome-analysis-optimized-speed-and), [Bactopia GitHub (MIT license)](https://github.com/bactopia/bactopia), [Bactopia paper, mSystems 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7406220/), [BacSeq paper, MDPI Microorganisms 2023](https://www.mdpi.com/2076-2607/11/7/1769)
 
@@ -796,6 +962,157 @@ stands as the separately-researched plan for the UI-to-pipeline connection; exac
 category names the owner used as examples (visualization, classification) - those need to be enumerated
 against the real current toolbox once this is actually scoped.
 
+### 6.17 Run results view — critiqued and researched 2026-09-14, needs study, NOT scoped or built
+
+Follows on from §6.15 item 8 (edit-as-copy pen icon, already logged there). Owner's starting proposal: a
+Run History entry opens a smaller reproduction of the pipeline shape the user actually drew (same layout,
+via canvas snapshot replay); clicking a node scrolls the page to that node's result section, or opens a new
+tab if the result "needs its own page"; a pen icon next to the run opens its pipeline in the Composer as an
+independent editable copy (never mutating the original run's record).
+
+**Open question the owner raised, and the driver for everything below:** does the result view show every
+node's output, or only the final node(s)? Resolved by reasoning from this project's own standing principle
+(PLAN.md line 10: the GUI's job is to make the pipeline "fully inspectable... without feeling like a
+blackbox") plus the fact that the engine already publishes every tool into its own `results/<tool>/`
+directory (`conf/modules.config`) - the data already exists per-node, it just isn't surfaced yet. **Decided
+direction: per-node, not final-only**, with final/aggregate (MultiQC/Pavian) staying the rollup view, not
+the only view.
+
+#### Critiques of the initial proposal
+
+1. **Inconsistent interaction model** - nothing specifies which nodes scroll in-page vs. open a new tab;
+   that was left as an ad hoc per-build judgment call, which drifts inconsistent as more tools get added.
+2. **Doesn't actually solve node disambiguation** - a mini-map alone only disambiguates two same-tool nodes
+   (the pipeline already has this exact case: the pre-/post-depletion Kraken2/Bracken pass,
+   `conf/modules.config` lines ~60-82) if it's keyed by node instance ID, not tool name. As proposed,
+   clicking "Kraken2" is still ambiguous when two exist.
+3. **No run-status encoding** - a results view implies a completed (or partially completed) run, but nothing
+   color-codes success/failed/skipped per node; composer already has an enabled/skipped concept at build
+   time (§6.16), a results view with no equivalent at run time is a step backward.
+4. **"The result of a node" is ambiguous for multi-artifact tools** - e.g. Kraken2 alone produces a report, a
+   classified-reads file, and a MultiQC contribution; undefined which of those "the result" means per tool.
+5. **No handling for non-viewable/binary outputs** - assembly outputs (`metaspades`/`megahit`) are FASTA/BAM
+   scale; "scroll to the result" implies renderable content, which has to degrade to a summary-stat +
+   download for these.
+6. **Mini-map fidelity isn't guaranteed** - composer already has its own auto-layout engine
+   (`composer-ui/src/utils/autoLayout.ts`); if the results mini-map re-runs that instead of replaying the
+   saved canvas snapshot (`importCanvasSnapshot.ts`), "same shape as they made" silently stops being true.
+7. **Performance risk from eager inline rendering** - History already embeds one MultiQC report in an
+   `<iframe>` (`HistoryPage.tsx`); N per-node reports all mounted on one page for a 15-20 node pipeline needs
+   lazy-loading (render on scroll-into-view/click), not eager mount-all.
+8. **No deep-linking** - nothing lets a specific node's result in a specific run be bookmarked/shared
+   directly; inconsistent with this project's existing FAIR/reproducibility culture (run-report, git
+   revision + params dump on every run, per §6.13).
+9. **Edit-as-copy inherits an already-logged gap** - §6.15 item 8 already flags that saved pipelines have no
+   name/description field; a copy of a nameless thing is still nameless.
+10. **Undefined scope for parameters vs. topology on copy** - does edit-as-copy carry the run's actual
+    parameter overrides forward, or just node/edge shape? Not deciding this is fine, leaving it silently
+    unaddressed is not.
+11. **No accessibility path** - click-only navigation on a node graph excludes keyboard navigation between
+    results, inconsistent with the Nielsen-heuristic accessibility bar `docs/TESTING.md` already applies.
+12. **Live/in-progress runs unaddressed** - fine to defer, but should be an explicit v1-out-of-scope note,
+    not a silent gap discovered later.
+
+#### Requirements this produces
+
+1. **Key every node's results by node instance ID, not tool name.** The mini-map replays the saved canvas
+   snapshot (reusing `importCanvasSnapshot.ts`); every click/scroll/highlight target resolves against a
+   unique node ID, so duplicate-tool nodes stay distinguishable.
+2. **The engine should emit outputs keyed by node ID**, via the still-open UI-to-engine converter (§6.11),
+   rather than the current pattern of a hand-written `withName` override + `ext.prefix` suffix per known
+   duplicate (today's `_predepletion` fix, `conf/modules.config`) - that pattern doesn't scale to a general
+   composer where a user can draw a duplicate anywhere.
+3. **Define a per-tool "result contract"**: primary artifact(s), display mode, and whether it's inline or
+   new-tab - a property of the tool catalog entry (`composer-ui/src/data/toolCatalog.ts`), not an ad hoc call
+   per build. See the visualization-vs-values split below for what that display mode should actually be, per
+   tool.
+4. **Encode run status per node in the mini-map** - success/failed/skipped/not-yet-run, visually distinct.
+5. **Lazy-load per-node result content** - mount only when scrolled into view or opened.
+6. **Give every node result a stable, shareable URL** (route or hash per node ID).
+7. **Extend export/import + Run History metadata with a name/description field**, and make edit-as-copy state
+   explicitly whether it copies topology only or topology + parameter overrides.
+8. **Support keyboard navigation between nodes/results**, not mouse-only.
+9. **Explicitly scope v1 to completed runs only**; log live/in-progress result viewing as a separate,
+   deliberately deferred future item.
+
+#### What the toolbox for this project (§9.1) needs to show, researched against real pathogen-discovery
+   practice and this project's actual R&D use case (vaccine-relevant pathogen/viral candidate discovery),
+   not assumed
+
+Owner supplied three reference images (a Sankey taxonomy-flow diagram and two Krona radial charts) as the
+expected shape for Kraken2/Bracken results - both are confirmed, real, purpose-built outputs already
+produced by tools in this space (Pavian renders Sankey diagrams from Kraken2/Bracken/MetaPhlAn4 input
+specifically; Krona is the standard interactive radial drill-down), not something invented for this project.
+Researched every other node the same way rather than assuming a chart is always warranted - **not every node
+needs a visualization; several just need a values/stat table, which is intentionally the smaller build.**
+
+**Nodes that earn a real chart** (the data is structurally/relationally shaped - a table would lose the
+signal):
+- **kraken2 / bracken** - Sankey diagram (Pavian-style, read-count flow across taxonomic ranks) **and** a
+  Krona radial chart (interactive per-sample drill-down) - both, not one, per the owner's reference images;
+  shown for the pre- **and** post-depletion pass separately, since the delta between them is itself the
+  useful QC signal (if the taxonomic profile barely changes after host depletion, depletion likely
+  underperformed).
+- **fastp / fastqc** - per-base quality line plot and adapter-content curve (both already produced by
+  MultiQC's fastp/FastQC modules from JSON/report input) - trend-over-read-position is the signal a single
+  number can't show (e.g. adapter content rising specifically toward the 3' end).
+- **megahit / metaspades + quast** - cumulative-length curve at minimum (QUAST's own Icarus contig viewer if
+  budget allows) - contiguity is a distribution (many similar contigs vs. one dominant one), not a scalar;
+  N50 alone doesn't distinguish those cases.
+
+**Nodes that only need a values/stat table** (deliberately no chart - confirmed by researching each tool's
+own typical output that no standard/canonical plot exists, or that a table is what practitioners actually
+use):
+- **bowtie2 (host depletion)** - % reads aligned to host / % remaining per sample. Sample-type dependent in a
+  way worth showing as a plain number for comparison against known ranges (e.g. stool <0.5% host is normal,
+  a nasal/respiratory sample >90% host is also normal - the number needs context, not a chart).
+- **genomad (viral discovery)** - sortable table: contig ID, virus score (0-1, calibrated probability, 0.7
+  is geNomad's own default pass threshold), marker enrichment. No canonical plot exists in geNomad's own
+  documentation; this is the primary triage output a vaccine-relevant candidate search would act on directly,
+  so sortability by score matters more than a visualization would.
+- **checkv (viral genome QC)** - sortable table: contig ID, completeness %, contamination flag, confidence
+  tier (high/medium/low, CheckV's own tiers based on median unsigned error). Gate before trusting a geNomad
+  hit enough to act on it - a high-score geNomad hit with low CheckV completeness is a materially different
+  finding than a high-score, high-completeness one, so these two tools' outputs should be joined in one row
+  per candidate, not shown as two separate unrelated node panels.
+- **maxbin2 (binning)** - table: bin ID, estimated completeness, genome size, GC%, coverage - and explicitly
+  flagged in the UI as an internal/optimistic estimate (MaxBin2's own completeness estimate is known to run
+  optimistic; CheckM is the usual independent second opinion, not currently in this pipeline), so it isn't
+  presented with the same authority as CheckV's database-calibrated numbers.
+- **multiqc / pavian (reporting)** - stays the rollup/aggregate view, not a per-node values table; its job is
+  spotting a sample-specific or pipeline-wide outlier, from which the user clicks into the specific node
+  that's off.
+
+**Further research into what the team would actually expect, beyond the display format:**
+- **A real deployed product doing the same job (CZ ID / IDseq, Chan Zuckerberg Initiative's open-source
+  mNGS pathogen-detection platform) confirms the shape of a good taxon-level result view goes beyond a
+  chart alone**: its Sample Report table shows two alignment-confidence metrics per taxon (NT and NR
+  database alignment, not just a single count), supports filtering to a taxon category (bacteria/virus/
+  eukaryote) and a "known pathogen" tag pulled from a curated pathogen list, and a cross-sample heatmap
+  colored by relative abundance for comparing multiple runs at once. Directly relevant precedent for this
+  project's kraken2/bracken and genomad result views: a sortable/filterable table alongside the chart, with
+  a pathogen-relevance flag, is what a real team in this exact space actually uses day to day - not the
+  chart in isolation.
+- **This pipeline's real place in a vaccine R&D workflow is upstream triage, not final antigen selection** -
+  reverse-vaccinology candidate-selection criteria (antigenicity, surface exposure, cross-strain
+  conservation, host-protein dissimilarity) are a separate, downstream analysis this pipeline does not
+  perform and has no node for. What this pipeline's result view needs to get right is handing off a clean,
+  well-flagged, **exportable** candidate list (genomad score + checkv completeness/contamination/confidence
+  joined per contig) to whatever reverse-vaccinology tooling comes next - export fidelity on the
+  genomad/checkv table matters more here than it would for a purely informational node, since real downstream
+  work depends on it leaving this UI intact.
+- **QC-dashboard literature (QuaC and related clinical-NGS QC-standardization work) reinforces the
+  go/no-go-per-node requirement already listed above**: the recurring failure mode called out across that
+  literature is QC output scattered across multiple tools with no standardized review, so downstream users
+  proceed unaware of a real QC issue. A "Sample QC Review System"-style flag per node (this project's
+  requirement #4 above) is exactly the mitigation that literature converges on, not a nice-to-have.
+
+**Not decided here:** exact chart library/rendering approach for the Sankey/Krona/cumulative-length
+visualizations (reuse Pavian/Krona's own JS, or build against a charting library already in scope for this
+stack - unresearched); whether the genomad+checkv joined-candidate table needs its own export format beyond
+whatever §6.11's general export/import fidelity requirement already covers; exact wording/placement of the
+per-node go/no-go indicator described in requirement #4.
+
 ## 7. Key decision: platform choice (owner decision required)
 
 The spec (§2, §4.2) mandates DolphinNext, but research (§2.2) proves the official image/repo/docs no longer exist. Options:
@@ -902,6 +1219,30 @@ Seqera deployment options — evaluation deferred to the handover decision gate 
 
 Verified pinned tags for all eight: §2.1. Module source code (what each actually runs, argument-by-argument): `modules/nf-core/<tool>/main.nf` in this repo.
 
+#### WGS sibling pipeline tools (`workflows/wgs.nf`, §6.9) — built 2026-09-14, Phases 1–5
+
+A separate table, not merged into the list above - these run in the WGS sibling pipeline
+(`--pipeline wgs`), not the metagenomics one, and answer a different question (one isolate vs. a
+reference, not a mixed community).
+
+| Tool | What it does, in plain terms | Real container tag (verified at install time) |
+|---|---|---|
+| **BWA-MEM2** | Aligns an isolate's reads against a reference genome - the GATK best-practices aligner, chosen specifically because downstream variant calling needs its indel/soft-clip handling (unlike Bowtie2, which stays on host-depletion duty in the metagenomics pipeline). | `community.wave.seqera.io/library/bwa-mem2_htslib_samtools:db98f81f55b64113` |
+| **samtools** (`faidx`/`stats`) | Reference indexing (`.fai`, needed by GATK4) and real alignment QC stats (mapped %, error rate) that feed MultiQC, since BWA-MEM2 itself has no native MultiQC module. | `community.wave.seqera.io/library/htslib_samtools:1.24--d697cfb9dce007cd` |
+| **Kraken2** (reused) | Same tool, same DB, same job as the metagenomics pipeline's own Kraken2 (§9.1) - species/contamination screening on an isolate's raw reads, wired via an `as`-aliased include, not a second copy. | Same as §9.1's Kraken2 entry. |
+| **Mash** (`screen`) | Fast genome-distance/species-ID screening against a real external RefSeq sketch database (~91k genomes) - a different, independent signal from Kraken2 (MinHash containment vs. k-mer classification), both kept since research showed each is genuinely used in the field for different reasons (§6.9 Phase 3). | `quay.io/biocontainers/mash:2.3--he348c14_1` |
+| **seqkit** (`stats`) | Real per-file read-count/length/quality statistics (Q20/Q30/GC%/N50) on raw reads, with native MultiQC support. | `community.wave.seqera.io/library/seqkit:2.13.0--05c0a96bf9fb2751` |
+| **GATK4** (`CreateSequenceDictionary`/`HaplotypeCaller`/`GenotypeGVCFs`) | Reference dictionary prep, then variant calling: `HaplotypeCaller` always runs in GVCF mode (`-ERC GVCF`) and `GenotypeGVCFs` genotypes per-sample - the GATK best-practices shape, chosen to cover the broadest real use case (many isolates vs. one reference is this pipeline's own stated scenario) without recalling anything once real cross-sample joint genotyping is added later. | `community.wave.seqera.io/library/gatk4-main_gcnvkernel:961440660027ec01` |
+| **RENAME_REFERENCE** (local module, not a real "tool") | Fixes a real bug: GATK4 refuses a reference file whose staged name has no recognized fasta extension (common when `wgs_reference_fasta` is an NCBI efetch URL). Renames/copies once so every downstream consumer gets one consistent `reference.fasta`. | Reuses `bowtie2_htslib_samtools_pigz` (§9.1) - no new image for one `cp` call. |
+
+Real, published-container versions confirmed at `nf-core modules install` time (2026-09-14), not assumed
+from earlier research (this project's own recurring lesson - see the SPAdes 4.3.0-vs-4.1.0 correction
+above). Real, verified fixture: Staphylococcus aureus (`ERR044595` vs. `NC_007795.1`) - 90.7% mapping rate,
+37,491 real called variants including a confirmed real SNP (`NC_007795.1:89 C>T`). Real measured resource
+usage, deliberately concerning where it is: `MASH_SCREEN` peaked at **6GB RAM** against the real RefSeq DB
+(§6.9 Phase 3); `GATK4_HAPLOTYPECALLER` took 3m23s real compute for one ~2.86 Mb genome (§6.9 Phase 4). Full
+build history, every real bug found and fixed along the way: `docs/KNOWN_ISSUES.md` #22-#25.
+
 ### 9.2 Pinned in the plan, not yet wired into a module
 
 | Tool | What it does, in plain terms | Why it's not in `workflows/microbox.nf` yet |
@@ -916,19 +1257,27 @@ Verified pinned tags for all eight: §2.1. Module source code (what each actuall
 
 ### 9.3 New candidate tools — researched 2026-09-11 (owner ask: cover the team's likely future needs)
 
-These are not yet pinned anywhere in this repo. They were researched to the same standard as everything above — version and container tag each verified live against Quay.io/bioconda/GitHub releases on 2026-09-11 — so they're ready to add the moment the team asks, or the moment a future module (e.g. WGS, §6.9) needs them. All nine already have maintained **nf-core modules** except HMMER and DIAMOND, which would need a small custom module (same "reuse before building" rule as §6.1, applied honestly where reuse isn't available).
+**Update 2026-09-14: four of these nine (BWA-MEM2, samtools, seqkit, Mash) are now implemented** — the WGS
+sibling pipeline needed exactly them, per each row's own "where it would matter here" prediction (see the
+"Implemented" notes inline below, and §9.1's own WGS tools table for the real installed tags/full detail).
+The remaining five (HMMER, DIAMOND, BLAST+, BBTools, Prodigal) are still not pinned anywhere in this repo.
+They were researched to the same standard as everything above — version and container tag each verified
+live against Quay.io/bioconda/GitHub releases on 2026-09-11 — so they're ready to add the moment the team
+asks, or the moment a future module needs them. Of the original nine, only HMMER and DIAMOND lack a
+maintained **nf-core module** and would need a small custom one (same "reuse before building" rule as §6.1,
+applied honestly where reuse isn't available).
 
 | Tool | What it does, in plain terms | Where it would matter here |
 |---|---|---|
-| **BWA-MEM2** | Aligns reads to a reference genome — same job as Bowtie2, but it's the field-standard aligner specifically for *variant calling* (which mutations does this genome have vs. a reference), not host depletion. | The alignment step of any future pathogen/isolate or host-animal WGS work (§6.9) — Bowtie2 stays on host depletion; BWA-MEM2 would feed a variant caller (GATK4/DeepVariant/FreeBayes). |
-| **samtools** | The standard toolkit for manipulating alignment files (SAM/BAM/CRAM): sort, index, filter, merge, compute coverage/depth stats. Not a pipeline stage on its own — it's plumbing other alignment-based tools already depend on. | Already a *hidden* dependency today — `modules/nf-core/bowtie2/align/main.nf` pipes Bowtie2's output straight through `samtools sort`/`view` inside the same container. Exposing it as its own module would matter for standalone BAM QC/stats feeding MultiQC, or any future WGS variant-calling chain. |
-| **seqkit** | A fast, general-purpose FASTA/FASTQ utility belt: sequence stats (length, GC%, N50), subsetting/filtering by ID, dedup, sampling, format conversion — the sequence-level equivalent of samtools' alignment-level utility belt. | Useful throughout: sanity-checking samplesheet FASTQs before fastp, pulling out one taxon's reads after Kraken2 for closer inspection, or lightweight contig stats alongside QUAST. |
+| **BWA-MEM2** | Aligns reads to a reference genome — same job as Bowtie2, but it's the field-standard aligner specifically for *variant calling* (which mutations does this genome have vs. a reference), not host depletion. | **Implemented 2026-09-14** (§6.9 Phase 2, `params.skip_bwamem2`) — feeds GATK4, as predicted here. Real installed tag differs from this row's 2026-09-11 research (`community.wave.seqera.io/library/bwa-mem2_htslib_samtools:db98f81f55b64113`, not the standalone `quay.io/biocontainers/bwa-mem2` tag below) — same "install the real module, don't hand-pick the researched tag" lesson as SPAdes (§9.2). |
+| **samtools** | The standard toolkit for manipulating alignment files (SAM/BAM/CRAM): sort, index, filter, merge, compute coverage/depth stats. Not a pipeline stage on its own — it's plumbing other alignment-based tools already depend on. | **Implemented 2026-09-14** (§6.9 Phases 2/4, `samtools/faidx` + `samtools/stats`) — real BAM QC feeding MultiQC and reference indexing for GATK4, both predicted uses here. Real tag: `community.wave.seqera.io/library/htslib_samtools:1.24--d697cfb9dce007cd`. |
+| **seqkit** | A fast, general-purpose FASTA/FASTQ utility belt: sequence stats (length, GC%, N50), subsetting/filtering by ID, dedup, sampling, format conversion — the sequence-level equivalent of samtools' alignment-level utility belt. | **Implemented 2026-09-14** (§6.9 Phase 3, `params.skip_seqkit_stats`) — real per-file read stats feeding MultiQC. Real tag: `community.wave.seqera.io/library/seqkit:2.13.0--05c0a96bf9fb2751`. |
 | **HMMER** | Searches sequences against *profile* models (built from a family of related proteins) rather than raw sequence-to-sequence comparison like BLAST — catches distant relatives that plain similarity search misses (e.g. "does this protein contain a known toxin domain?" even with low sequence identity). | Already riding along invisibly — CheckV's own container bundles HMMER as a runtime dependency (§2.1). As a standalone module: functional/domain annotation of assembled contigs — screening for virulence factors, toxins, or antigen-relevant domains, directly relevant to vaccine R&D. |
 | **DIAMOND** | A BLAST-compatible aligner built for speed at scale — commonly hundreds of times faster than BLAST on large protein datasets, at a small sensitivity cost. Same job as BLAST+, different engineering trade-off. | Also already inside CheckV's container (it builds a local DIAMOND database from `checkv_reps.faa` on demand — confirmed in the existing fact-check report, §2.1). Standalone: fast large-scale functional/taxonomic annotation of contigs at a scale where BLAST+ would be too slow. |
 | **BLAST+** | NCBI's classic, general-purpose sequence similarity search suite — "how similar is this sequence to anything in a reference database?" Slower than DIAMOND at scale but the long-standing standard with the widest ecosystem support. | Third tool riding along inside CheckV's dependencies. Standalone: smaller, precision-focused lookups — confirming a specific contig's closest known relative, or reference-based strain ID. |
 | **BBTools** (BBDuk / BBNorm / BBMap) | A suite of 90+ tools for sequence data. The three relevant here: **BBDuk** (adapter/contaminant trimming — an alternative to fastp), **BBNorm** (k-mer-based read normalization/downsampling, useful for cutting assembly compute on very deep datasets before MEGAHIT), **BBMap** (an alternative aligner to Bowtie2 for host depletion). | Swappable alternatives at the QC and host-depletion stages — a second option if fastp/Bowtie2 behave oddly on a given dataset, a standard bioinformatics cross-check pattern, not a replacement. |
 | **Prodigal** | Predicts protein-coding genes in bacterial/archaeal genomes or assembled contigs — turns "a pile of assembled DNA" into "here are the genes on it," a prerequisite for any downstream functional/antigen search with HMMER or DIAMOND. | Direct gene-calling on any contigs this pipeline produces. **Correction to this document's own fact-check report:** that report states CheckV/geNomad depend on "Prodigal" — current bioconda recipes for both actually pin `pyrodigal-gv`, a separate Cython-accelerated reimplementation (different maintainer, adds viral-specific training models for geNomad's use case), not the classic binary. Worth fixing in §2.1's dependency notes; doesn't block adding classic Prodigal as its own standalone module. |
-| **Mash** | Estimates how similar two genomes (or a genome and a sample) are, extremely fast, by reducing each to a small "sketch" (MinHash signature) instead of a full alignment — a fingerprint instead of a full comparison. `mash screen` in particular checks whether known genomes are present in a raw read set. | Quick "what species is this / is this sample contaminated" check *before* committing to a full Kraken2/assembly run. Real precedent: **Bactopia** — the bacterial WGS pipeline already recommended for future pathogen/isolate work (§6.9) — uses Mash internally for exactly this (species confirmation + contamination QC), so adding it here is doubly justified. |
+| **Mash** | Estimates how similar two genomes (or a genome and a sample) are, extremely fast, by reducing each to a small "sketch" (MinHash signature) instead of a full alignment — a fingerprint instead of a full comparison. `mash screen` in particular checks whether known genomes are present in a raw read set. | **Implemented 2026-09-14** (§6.9 Phase 3, `params.skip_mash`) — real finding while wiring it: `mash screen`'s query must be raw reads directly, not a pre-built sketch (`mash/sketch` turned out to have no role here at all, despite being installed for it initially — `docs/KNOWN_ISSUES.md` #24). Real tag: `quay.io/biocontainers/mash:2.3--he348c14_1` (matches this row's own 2026-09-11 research exactly, no drift this time). |
 
 **Verified facts** (all checked live 2026-09-11; sources inline):
 

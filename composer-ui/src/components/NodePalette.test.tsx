@@ -6,10 +6,10 @@ import i18n from '../i18n/i18n'
 import { NodePalette, DRAG_DATA_FORMAT } from './NodePalette'
 import { TOOL_CATALOG } from '../data/toolCatalog'
 
-function renderPalette() {
+function renderPalette(family?: 'metagenomics' | 'wgs') {
   return render(
     <I18nextProvider i18n={i18n}>
-      <NodePalette />
+      <NodePalette family={family} />
     </I18nextProvider>,
   )
 }
@@ -92,5 +92,13 @@ describe('NodePalette', () => {
 
     await user.type(screen.getByPlaceholderText('Search tools...'), 'fastp')
     expect(screen.getByText('fastp')).toBeInTheDocument()
+  })
+
+  // Full-UI-architecture Phase 3: the palette filters to one pipeline family at a time.
+  it('filtering by family hides the other family\'s tools but keeps shared ones (MultiQC/Pavian)', () => {
+    renderPalette('wgs')
+    expect(screen.getByText('BWA-MEM2')).toBeInTheDocument()
+    expect(screen.getByText('MultiQC')).toBeInTheDocument()
+    expect(screen.queryByText('fastp')).not.toBeInTheDocument()
   })
 })

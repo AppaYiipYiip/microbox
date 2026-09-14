@@ -1,11 +1,10 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { serveResults } from './serve-results-plugin.js'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), serveResults()],
+  plugins: [react()],
   server: {
     proxy: {
       // Proxies the real, functioning Streamlit launcher (bin/run-ui.sh, a
@@ -20,13 +19,30 @@ export default defineConfig({
       //
       // Dev-server-only mechanism (Vite's own proxy, not a production
       // feature) - a real production deployment would need an actual
-      // reverse proxy (nginx or similar) doing the same job; this is
-      // exactly the "UI-to-backend connection" PLAN.md §6.12 already flags
-      // as real, separate, not-yet-built scope, just far enough along now
-      // to let the two existing pieces sit behind one port for local use.
+      // reverse proxy (nginx or similar) doing the same job. Still in use
+      // as of full-architecture Phase 1 (server/main.py) - Streamlit's own
+      // fate is a deliberate Phase 5 decision point, not resolved yet.
       '/run-app': {
         target: 'http://localhost:8501',
         ws: true,
+        changeOrigin: true,
+      },
+      // Proxies the real backend (server/main.py, PLAN.md §6.12 / full-
+      // architecture Phase 1) in the same way - '/reports-api' and
+      // '/reports' used to be served by this file's own serveResults()
+      // dev-only Vite plugin (composer-ui/serve-results-plugin.ts); that
+      // plugin is retired as of this change, not kept alongside a real
+      // backend that does the identical job. HistoryPage.tsx needed zero
+      // changes - the real backend preserves the exact same URL contract
+      // (same paths, same response shapes) on purpose. Run `server/`'s own
+      // uvicorn (see server/main.py's own header, or bin/run-server.sh once
+      // it exists) on port 8000 for these to resolve.
+      '/reports-api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/reports': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

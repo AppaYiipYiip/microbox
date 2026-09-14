@@ -54,6 +54,61 @@
    value is in the hover tooltip and the detail panel, not repeated here -
    node text is already truncated for space (see the fixed-size comment
    above). */
+/* Full-UI-architecture Phase 4: live per-node run status, reusing the skipped-badge's
+   own visual language (absolute-positioned pill, top-left) rather than inventing a new
+   pattern - same top offset as .tool-node__skipped-badge so the two never render at the
+   same time (ToolNode.tsx only shows one or the other: a skipped node's status is
+   irrelevant since it never ran). A colored left border on the node itself makes the
+   status scannable even when zoomed out too far to read the badge text. */
+.tool-node--run-running {
+  border-left: 3px solid #3a6cf4;
+}
+
+.tool-node--run-completed {
+  border-left: 3px solid #9ece6a;
+}
+
+.tool-node--run-failed {
+  border-left: 3px solid #e06c75;
+}
+
+.tool-node__run-badge {
+  position: absolute;
+  top: -0.6rem;
+  left: 0.5rem;
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+
+.tool-node__run-badge--running {
+  background: #3a6cf4;
+  /* A quiet pulse - "still going," not just a static label - kept subtle (opacity only,
+     no size/position change) so it doesn't fight for attention against a busy canvas. */
+  animation: tool-node-run-pulse 1.4s ease-in-out infinite;
+}
+
+.tool-node__run-badge--completed {
+  background: #2f6b3a;
+}
+
+.tool-node__run-badge--failed {
+  background: #7a2a2a;
+}
+
+@keyframes tool-node-run-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .tool-node__param-dot {
   display: inline-block;
   width: 6px;

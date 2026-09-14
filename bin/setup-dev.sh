@@ -16,7 +16,7 @@
 # Safe to re-run - every step is idempotent.
 set -euo pipefail
 
-echo "=== 1/7: DNS fix (corporate/VPN networks stall apt on PTR lookups) ==="
+echo "=== 1/8: DNS fix (corporate/VPN networks stall apt on PTR lookups) ==="
 # WSL2 auto-generates /etc/resolv.conf from the Windows host's DNS, which on
 # a corporate network can stall every apt-get update for tens of seconds per
 # host. Point at public resolvers instead - confirmed fix, not a guess.
@@ -41,12 +41,12 @@ if ! grep -qx 'nameserver 8.8.8.8' /etc/resolv.conf 2>/dev/null; then
 fi
 echo "  (if this is the first run, restart WSL now: wsl --terminate <distro>, then re-run this script)"
 
-echo "=== 2/7: apt prerequisites (IPv4 forced - WSL2's IPv6 routing is commonly broken) ==="
+echo "=== 2/8: apt prerequisites (IPv4 forced - WSL2's IPv6 routing is commonly broken) ==="
 printf 'Acquire::ForceIPv4 "true";\n' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 > /dev/null
 sudo apt-get update -qq
 sudo apt-get install -y -qq curl unzip zip ca-certificates python3-pip python3-venv shellcheck
 
-echo "=== 3/7: Java 21 (Temurin) via SDKMAN ==="
+echo "=== 3/8: Java 21 (Temurin) via SDKMAN ==="
 if [ ! -d "$HOME/.sdkman" ]; then
   curl -s "https://get.sdkman.io" | bash
 fi
@@ -72,7 +72,7 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 set -u
 java -version
 
-echo "=== 4/7: Nextflow (pinned) ==="
+echo "=== 4/8: Nextflow (pinned) ==="
 export NXF_VER=26.04.6
 if ! command -v nextflow >/dev/null || ! nextflow -version 2>&1 | grep -q "$NXF_VER"; then
   curl -s https://get.nextflow.io | bash
@@ -82,7 +82,7 @@ fi
 grep -q NXF_VER ~/.bashrc || echo "export NXF_VER=$NXF_VER" >> ~/.bashrc
 nextflow -version
 
-echo "=== 5/7: Docker credential-helper fix ==="
+echo "=== 5/8: Docker credential-helper fix ==="
 # Docker Desktop sometimes writes a Windows-side credential helper
 # (desktop.exe) into the WSL distro's config, which can't execute from
 # Linux ("exec format error"). Public images need no credentials at all, so
@@ -97,7 +97,7 @@ else
   echo "  WARNING: docker not found - enable WSL Integration for this distro in Docker Desktop settings, then re-run this script"
 fi
 
-echo "=== 6/7: Python venv for the Streamlit UI ==="
+echo "=== 6/8: Python venv for the Streamlit UI ==="
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [ ! -d .venv-ui ]; then
   python3 -m venv .venv-ui
@@ -111,7 +111,23 @@ source .venv-ui/bin/activate
 pip install --quiet -r ui/requirements-dev.txt
 streamlit --version
 
-echo "=== 7/7: nf-test (pinned) ==="
+echo "=== 7/8: Python venv for the real backend (server/) ==="
+# Added 2026-09-14 (PLAN.md §6.12 / full-architecture Phase 1) - the real
+# FastAPI backend that will eventually let Composer's own Run button work
+# and replace composer-ui's dev-only serve-results-plugin.ts. Same pattern
+# as step 6/8's .venv-ui: its own venv, not merged into .venv-ui, since this
+# is a genuinely separate app with its own dependency set (FastAPI/uvicorn,
+# not Streamlit) that shouldn't need reinstalling/upgrading together.
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+if [ ! -d .venv-server ]; then
+  python3 -m venv .venv-server
+fi
+# shellcheck disable=SC1091  # doesn't exist at lint time - created by python3 -m venv above
+source .venv-server/bin/activate
+pip install --quiet -r server/requirements-dev.txt
+python -c "import fastapi; print('fastapi', fastapi.__version__)"
+
+echo "=== 8/8: nf-test (pinned) ==="
 # Added 2026-09-11 - a real gap, not an oversight to leave alone: nf-test
 # has been this project's whole test suite (docs/planning/PLAN.md §6.2
 # layer 1, `tests/main.nf.test`) since early in development, extensively
